@@ -1,0 +1,24 @@
+{
+  "name": "Auto Publisher",
+  "description": "Publishes approved content to Meta, Google, and TikTok",
+  "nodes": [
+    {
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "path": "publish-content",
+        "httpMethod": "POST"
+      },
+      "position": [250, 300]
+    },
+    {
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "parameters": {
+        "content": "TODO: Route to platform-specific publishing nodes (Meta Graph API, Google Ads API, TikTok Marketing API). POST result back to Jarvis Corunda /api/n8n/publish-result."
+      },
+      "position": [500, 200]
+    }
+  ],
+  "connections": {}
+}

@@ -1,0 +1,25 @@
+{
+  "name": "Campaign Metrics Fetcher",
+  "description": "Fetches campaign metrics from Meta/Google every 6 hours and sends to Jarvis Corunda",
+  "nodes": [
+    {
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 6 }]
+        }
+      },
+      "position": [250, 300]
+    },
+    {
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "parameters": {
+        "content": "TODO: Add Meta Ads API and Google Ads API nodes here to fetch actual metrics. Then POST to Jarvis Corunda webhook."
+      },
+      "position": [500, 200]
+    }
+  ],
+  "connections": {}
+}

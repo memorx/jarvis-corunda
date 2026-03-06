@@ -1,0 +1,25 @@
+{
+  "name": "Report Generator",
+  "description": "Weekly report compilation and delivery to clients",
+  "nodes": [
+    {
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "weeks", "weeksInterval": 1 }]
+        }
+      },
+      "position": [250, 300]
+    },
+    {
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "parameters": {
+        "content": "TODO: Fetch metrics from Jarvis Corunda, generate PDF report, and send via email to client."
+      },
+      "position": [500, 200]
+    }
+  ],
+  "connections": {}
+}
