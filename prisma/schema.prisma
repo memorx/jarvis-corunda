@@ -1,0 +1,363 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  SUPERADMIN
+  MANAGER
+  COMMUNITY
+  TRAFFIC
+  DESIGNER
+  PRODUCER
+  CLIENT
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      UserRole @default(COMMUNITY)
+  avatar    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedAccounts AccountUser[]
+  createdParrillas Parrilla[]
+  approvals        Approval[]
+  comments         Comment[]
+}
+
+model Account {
+  id          String  @id @default(cuid())
+  name        String
+  brandName   String
+  industry    String?
+  description String?
+
+  brandVoice     String?  @db.Text
+  brandColors    String[]
+  targetAudience String?  @db.Text
+  competitors    String?  @db.Text
+  guidelines     String?  @db.Text
+  sampleCopies   String?  @db.Text
+
+  metaPageId        String?
+  metaAdAccountId   String?
+  metaAccessToken   String?
+  googleAdsId       String?
+  tiktokAdAccountId String?
+  linkedinPageId    String?
+
+  platforms    Platform[]
+  contentTypes ContentType[]
+  monthlyBudget Float?
+  isActive     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     AccountUser[]
+  parrillas Parrilla[]
+  campaigns Campaign[]
+}
+
+model AccountUser {
+  id        String @id @default(cuid())
+  userId    String
+  accountId String
+  role      String
+
+  user    User    @relation(fields: [userId], references: [id])
+  account Account @relation(fields: [accountId], references: [id])
+
+  @@unique([userId, accountId])
+}
+
+enum Platform {
+  META_FEED
+  META_STORIES
+  META_REELS
+  GOOGLE_SEARCH
+  GOOGLE_DISPLAY
+  GOOGLE_YOUTUBE
+  TIKTOK
+  YOUTUBE_SHORTS
+  LINKEDIN
+  TWITTER_X
+}
+
+enum ContentType {
+  STATIC_IMAGE
+  CAROUSEL
+  VIDEO_SHORT
+  VIDEO_LONG
+  STORY
+  TEXT_ONLY
+}
+
+enum ContentStatus {
+  DRAFT
+  INTERNAL_REVIEW
+  REVISION
+  APPROVED_INTERNAL
+  CLIENT_REVIEW
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+  PAUSED
+  ARCHIVED
+}
+
+model Parrilla {
+  id          String         @id @default(cuid())
+  accountId   String
+  createdById String
+  name        String
+  month       Int
+  year        Int
+  description String?
+  status      ParrillaStatus @default(DRAFT)
+  aiPrompt    String?        @db.Text
+  aiStrategy  Json?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  account   Account         @relation(fields: [accountId], references: [id])
+  createdBy User            @relation(fields: [createdById], references: [id])
+  entries   ParrillaEntry[]
+  approvals Approval[]
+}
+
+enum ParrillaStatus {
+  DRAFT
+  INTERNAL_REVIEW
+  REVISION
+  APPROVED_INTERNAL
+  CLIENT_REVIEW
+  CLIENT_REVISION
+  APPROVED
+  IN_PRODUCTION
+  COMPLETED
+}
+
+model ParrillaEntry {
+  id         String   @id @default(cuid())
+  parrillaId String
+
+  publishDate DateTime
+  publishTime String?
+
+  platform    Platform
+  contentType ContentType
+  objective   String
+
+  headline    String?
+  primaryText String?  @db.Text
+  description String?
+  ctaText     String?
+  hashtags    String[]
+
+  visualConcept String? @db.Text
+  imagePrompt   String? @db.Text
+  videoScript   Json?
+
+  status     ContentStatus @default(DRAFT)
+  campaignId String?
+  isPaid     Boolean       @default(false)
+  budget     Float?
+
+  hookType    String?
+  aiReasoning String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parrilla  Parrilla   @relation(fields: [parrillaId], references: [id], onDelete: Cascade)
+  campaign  Campaign?  @relation(fields: [campaignId], references: [id])
+  assets    Asset[]
+  comments  Comment[]
+  approvals Approval[]
+}
+
+model Asset {
+  id      String    @id @default(cuid())
+  entryId String
+  type    AssetType
+  platform Platform
+
+  width       Int
+  height      Int
+  aspectRatio String
+
+  url          String?
+  thumbnailUrl String?
+
+  imagePrompt String? @db.Text
+  videoScript Json?
+  duration    Int?
+
+  status      AssetStatus @default(GENERATING)
+  textOverlay String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entry ParrillaEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+}
+
+enum AssetType {
+  IMAGE
+  VIDEO
+  CAROUSEL_SLIDE
+  THUMBNAIL
+}
+
+enum AssetStatus {
+  GENERATING
+  GENERATED
+  APPROVED
+  REVISION
+  FINAL
+  FAILED
+}
+
+model Campaign {
+  id        String   @id @default(cuid())
+  accountId String
+  name      String
+  platform  Platform
+  objective CampaignObjective
+
+  dailyBudget Float?
+  totalBudget Float?
+
+  audienceConfig Json?
+  status         CampaignStatus @default(DRAFT)
+  externalCampaignId String?
+
+  startDate DateTime?
+  endDate   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account Account          @relation(fields: [accountId], references: [id])
+  entries ParrillaEntry[]
+  metrics CampaignMetrics[]
+}
+
+enum CampaignObjective {
+  AWARENESS
+  TRAFFIC
+  ENGAGEMENT
+  LEADS
+  CONVERSIONS
+  SALES
+}
+
+enum CampaignStatus {
+  DRAFT
+  READY
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+model CampaignMetrics {
+  id         String   @id @default(cuid())
+  campaignId String
+  date       DateTime @db.Date
+
+  impressions Int   @default(0)
+  clicks      Int   @default(0)
+  spend       Float @default(0)
+  conversions Int   @default(0)
+  leads       Int   @default(0)
+  reach       Int   @default(0)
+  cpm         Float?
+  cpc         Float?
+  cpa         Float?
+  ctr         Float?
+  roas        Float?
+
+  createdAt DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, date])
+}
+
+model Approval {
+  id     String @id @default(cuid())
+  userId String
+
+  parrillaId String?
+  entryId    String?
+
+  type    ApprovalType
+  status  ApprovalStatus
+  comment String?        @db.Text
+
+  createdAt DateTime @default(now())
+
+  user     User           @relation(fields: [userId], references: [id])
+  parrilla Parrilla?      @relation(fields: [parrillaId], references: [id])
+  entry    ParrillaEntry? @relation(fields: [entryId], references: [id])
+}
+
+enum ApprovalType {
+  INTERNAL
+  CLIENT
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVISION_REQUESTED
+}
+
+model Comment {
+  id      String @id @default(cuid())
+  userId  String
+  entryId String
+  content String @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User          @relation(fields: [userId], references: [id])
+  entry ParrillaEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+}
+
+model AIGenerationLog {
+  id       String @id @default(cuid())
+  provider String
+  model    String
+
+  promptType String
+  prompt     String  @db.Text
+  response   String? @db.Text
+
+  inputTokens   Int   @default(0)
+  outputTokens  Int   @default(0)
+  estimatedCost Float @default(0)
+
+  accountId  String?
+  parrillaId String?
+  entryId    String?
+
+  duration Int?
+  success  Boolean @default(true)
+  error    String?
+
+  createdAt DateTime @default(now())
+}
