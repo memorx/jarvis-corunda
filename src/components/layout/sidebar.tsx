@@ -17,6 +17,7 @@ import {
   LogOut,
   Zap,
 } from 'lucide-react'
+import { signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/ui/avatar'
 
@@ -98,18 +99,16 @@ export function Sidebar({ user }: SidebarProps) {
             </div>
           )}
         </div>
-        <form action="/api/auth/signout" method="POST">
-          <button
-            type="submit"
-            className={cn(
-              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-red-400 transition-colors mt-1',
-            )}
-            title={collapsed ? 'Cerrar sesión' : undefined}
-          >
-            <LogOut className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>Cerrar sesión</span>}
-          </button>
-        </form>
+        <button
+          onClick={() => signOut({ callbackUrl: '/' })}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-red-400 transition-colors mt-1',
+          )}
+          title={collapsed ? 'Cerrar sesión' : undefined}
+        >
+          <LogOut className="h-4 w-4 shrink-0" />
+          {!collapsed && <span>Cerrar sesión</span>}
+        </button>
       </div>
 
       {/* Collapse toggle */}
