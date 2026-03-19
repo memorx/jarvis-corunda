@@ -19,8 +19,24 @@ import {
   Palette,
   Target,
   MessageSquare,
+  Clock,
 } from 'lucide-react'
-import { PLATFORM_LABELS, CONTENT_TYPE_LABELS, ROLE_LABELS } from '@/lib/constants'
+import { PLATFORM_LABELS, CONTENT_TYPE_LABELS, ROLE_LABELS, STATUS_LABELS } from '@/lib/constants'
+
+function getStatusVariant(status: string) {
+  const map: Record<string, 'default' | 'success' | 'warning' | 'error' | 'secondary' | 'orange'> = {
+    DRAFT: 'secondary',
+    INTERNAL_REVIEW: 'warning',
+    REVISION: 'error',
+    APPROVED_INTERNAL: 'default',
+    CLIENT_REVIEW: 'orange',
+    CLIENT_REVISION: 'error',
+    APPROVED: 'success',
+    IN_PRODUCTION: 'default',
+    COMPLETED: 'success',
+  }
+  return map[status] || 'secondary'
+}
 
 interface AccountDetail {
   id: string
@@ -47,10 +63,34 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
   const [account, setAccount] = useState<AccountDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'overview' | 'brand' | 'parrillas' | 'campaigns'>('overview')
+  const [parrillas, setParrillas] = useState<any[]>([])
+  const [parrillasLoading, setParrillasLoading] = useState(false)
+  const [parrillasLoaded, setParrillasLoaded] = useState(false)
 
   useEffect(() => {
     fetchAccount()
   }, [id])
+
+  useEffect(() => {
+    if (activeTab === 'parrillas' && !parrillasLoaded) {
+      fetchParrillas()
+    }
+  }, [activeTab])
+
+  async function fetchParrillas() {
+    setParrillasLoading(true)
+    try {
+      const res = await fetch(`/api/parrillas?accountId=${id}`)
+      if (!res.ok) throw new Error('Error')
+      const data = await res.json()
+      setParrillas(data)
+      setParrillasLoaded(true)
+    } catch {
+      setParrillas([])
+    } finally {
+      setParrillasLoading(false)
+    }
+  }
 
   async function fetchAccount() {
     try {
@@ -377,17 +417,64 @@ export default function AccountDetailPage({ params }: { params: Promise<{ id: st
         )}
 
         {activeTab === 'parrillas' && (
-          <div className="text-center py-12">
-            <CalendarDays className="h-12 w-12 text-[#94A3B8]/30 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-[#FAFAFA] mb-1">Parrillas</h3>
-            <p className="text-sm text-[#94A3B8] mb-4">
-              Las parrillas de esta cuenta aparecerán aquí
-            </p>
-            <Link href={`/dashboard/accounts/${id}/parrillas/new`}>
-              <Button>
-                <Plus className="h-4 w-4" /> Crear Parrilla
-              </Button>
-            </Link>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-medium text-[#FAFAFA]">Parrillas</h3>
+              <Link href={`/dashboard/accounts/${id}/parrillas/new`}>
+                <Button><Plus className="h-4 w-4" /> Nueva Parrilla</Button>
+              </Link>
+            </div>
+
+            {parrillasLoading && (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <Card key={i}><CardContent className="p-6"><Skeleton className="h-6 w-48 mb-2" /><Skeleton className="h-4 w-32" /></CardContent></Card>
+                ))}
+              </div>
+            )}
+
+            {!parrillasLoading && parrillas.length === 0 && (
+              <div className="text-center py-12">
+                <CalendarDays className="h-12 w-12 text-[#94A3B8]/30 mx-auto mb-4" />
+                <p className="text-sm text-[#94A3B8] mb-4">Sin parrillas creadas</p>
+                <Link href={`/dashboard/accounts/${id}/parrillas/new`}>
+                  <Button><Plus className="h-4 w-4" /> Crear Parrilla</Button>
+                </Link>
+              </div>
+            )}
+
+            {!parrillasLoading && parrillas.length > 0 && (
+              <div className="space-y-3">
+                {parrillas.map((p: any) => (
+                  <Link key={p.id} href={`/dashboard/accounts/${id}/parrillas/${p.id}`}>
+                    <Card className="hover:border-cyan-500/20 transition-all cursor-pointer">
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-semibold text-[#FAFAFA]">{p.name}</h4>
+                            <p className="text-sm text-[#94A3B8] mt-1">{p.description || 'Sin descripción'}</p>
+                            <div className="flex items-center gap-3 mt-2 text-xs text-[#94A3B8]">
+                              <span className="flex items-center gap-1">
+                                <CalendarDays className="h-3 w-3" />
+                                {p._count?.entries || 0} entradas
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {new Date(p.createdAt).toLocaleDateString('es-MX')}
+                              </span>
+                              {p.createdBy?.name && <span>Por: {p.createdBy.name}</span>}
+                            </div>
+                          </div>
+                          <Badge variant={getStatusVariant(p.status)}>
+                            {STATUS_LABELS[p.status] || p.status}
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
