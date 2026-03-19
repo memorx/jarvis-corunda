@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { cleanJsonResponse } from '@/lib/utils'
 import prisma from '@/lib/db'
 
 const anthropic = new Anthropic({
@@ -129,7 +130,7 @@ Responde UNICAMENTE con JSON valido:
     const content = response.content[0]
     if (content.type !== 'text') throw new Error('Unexpected response type')
 
-    const insights: MetricsInsight = JSON.parse(content.text)
+    const insights: MetricsInsight = JSON.parse(cleanJsonResponse(content.text))
 
     await prisma.aIGenerationLog.create({
       data: {

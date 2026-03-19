@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { getStrategySystemPrompt, getStrategyUserPrompt } from './prompts/strategy'
 import { buildAccountContext } from './context-builder'
+import { cleanJsonResponse } from '@/lib/utils'
 import prisma from '@/lib/db'
 
 const anthropic = new Anthropic({
@@ -89,7 +90,7 @@ export async function generateStrategy(input: StrategyInput): Promise<StrategyOu
     const content = response.content[0]
     if (content.type !== 'text') throw new Error('Unexpected response type')
 
-    const strategy: StrategyOutput = JSON.parse(content.text)
+    const strategy: StrategyOutput = JSON.parse(cleanJsonResponse(content.text))
 
     // Log the generation
     await prisma.aIGenerationLog.create({

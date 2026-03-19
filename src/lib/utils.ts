@@ -52,6 +52,10 @@ export function slugify(text: string): string {
     .replace(/(^-|-$)+/g, '')
 }
 
+export function cleanJsonResponse(text: string): string {
+  return text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim()
+}
+
 export function timeAgo(date: Date | string): string {
   const now = new Date()
   const past = new Date(date)

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { cn, formatCurrency, formatNumber, formatDate, formatDateTime, getInitials, slugify, timeAgo } from '../utils'
+import { cn, formatCurrency, formatNumber, formatDate, formatDateTime, getInitials, slugify, timeAgo, cleanJsonResponse } from '../utils'
 
 describe('cn', () => {
   it('merges class names', () => {
@@ -160,5 +160,27 @@ describe('timeAgo', () => {
   it('retorna mes (singular) para 1 mes', () => {
     mockNow(BASE)
     expect(timeAgo(new Date('2025-05-14T12:00:00Z'))).toBe('Hace 1 mes')
+  })
+})
+
+describe('cleanJsonResponse', () => {
+  it('strips ```json wrapper', () => {
+    expect(cleanJsonResponse('```json\n{"a":1}\n```')).toBe('{"a":1}')
+  })
+
+  it('strips ``` wrapper without language tag', () => {
+    expect(cleanJsonResponse('```\n[1,2,3]\n```')).toBe('[1,2,3]')
+  })
+
+  it('handles ```JSON (uppercase)', () => {
+    expect(cleanJsonResponse('```JSON\n{"b":2}\n```')).toBe('{"b":2}')
+  })
+
+  it('returns clean JSON unchanged', () => {
+    expect(cleanJsonResponse('{"clean":true}')).toBe('{"clean":true}')
+  })
+
+  it('trims whitespace around JSON', () => {
+    expect(cleanJsonResponse('  {"spaced":true}  ')).toBe('{"spaced":true}')
   })
 })

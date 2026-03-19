@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { getVideoDirectorSystemPrompt, getVideoDirectorUserPrompt } from './prompts/video-director'
 import { buildAccountContext } from './context-builder'
+import { cleanJsonResponse } from '@/lib/utils'
 import prisma from '@/lib/db'
 
 const anthropic = new Anthropic({
@@ -84,7 +85,7 @@ export async function generateVideoScript(input: VideoScriptInput): Promise<Vide
     const content = response.content[0]
     if (content.type !== 'text') throw new Error('Unexpected response type')
 
-    const script: VideoScriptOutput = JSON.parse(content.text)
+    const script: VideoScriptOutput = JSON.parse(cleanJsonResponse(content.text))
 
     await prisma.aIGenerationLog.create({
       data: {

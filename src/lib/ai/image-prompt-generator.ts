@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { getImageDirectorSystemPrompt, getImageDirectorUserPrompt } from './prompts/image-director'
 import { buildAccountContext } from './context-builder'
+import { cleanJsonResponse } from '@/lib/utils'
 import prisma from '@/lib/db'
 
 const anthropic = new Anthropic({
@@ -62,7 +63,7 @@ export async function generateImagePrompt(input: ImagePromptInput): Promise<Imag
     const content = response.content[0]
     if (content.type !== 'text') throw new Error('Unexpected response type')
 
-    const result: ImagePromptOutput = JSON.parse(content.text)
+    const result: ImagePromptOutput = JSON.parse(cleanJsonResponse(content.text))
 
     await prisma.aIGenerationLog.create({
       data: {

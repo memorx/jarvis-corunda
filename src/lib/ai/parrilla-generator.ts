@@ -5,6 +5,7 @@ import { generateImagePrompt } from './image-prompt-generator'
 import { generateVideoScript } from './video-script-generator'
 import prisma from '@/lib/db'
 import { PLATFORM_LABELS } from '@/lib/constants'
+import { cleanJsonResponse } from '@/lib/utils'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -108,7 +109,7 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
 
   const planContent = planResponse.content[0]
   if (planContent.type !== 'text') throw new Error('Unexpected response type')
-  const entryPlans: EntryPlan[] = JSON.parse(planContent.text)
+  const entryPlans: EntryPlan[] = JSON.parse(cleanJsonResponse(planContent.text))
 
   // Step 4: Create parrilla in DB
   const parrilla = await prisma.parrilla.create({

@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { getCopywriterSystemPrompt, getCopyUserPrompt } from './prompts/copywriter'
 import { buildAccountContext } from './context-builder'
+import { cleanJsonResponse } from '@/lib/utils'
 import { PLATFORM_SPECS } from '@/lib/constants'
 import prisma from '@/lib/db'
 
@@ -95,7 +96,7 @@ export async function generateCopy(input: CopyInput): Promise<CopyOutput> {
     const content = response.content[0]
     if (content.type !== 'text') throw new Error('Unexpected response type')
 
-    const copy: CopyOutput = JSON.parse(content.text)
+    const copy: CopyOutput = JSON.parse(cleanJsonResponse(content.text))
 
     await prisma.aIGenerationLog.create({
       data: {
