@@ -29,14 +29,24 @@ export default function ParrillasListPage({ params }: { params: Promise<{ id: st
   const { id: accountId } = use(params)
   const [parrillas, setParrillas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch(`/api/parrillas?accountId=${accountId}`)
-      .then(res => res.json())
-      .then(data => setParrillas(data))
-      .catch(console.error)
-      .finally(() => setLoading(false))
+    fetchParrillas()
   }, [accountId])
+
+  function fetchParrillas() {
+    setError(null)
+    setLoading(true)
+    fetch(`/api/parrillas?accountId=${accountId}`)
+      .then(res => {
+        if (!res.ok) throw new Error('Error al cargar parrillas')
+        return res.json()
+      })
+      .then(data => setParrillas(data))
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false))
+  }
 
   return (
     <>
@@ -54,6 +64,15 @@ export default function ParrillasListPage({ params }: { params: Promise<{ id: st
             </Button>
           </Link>
         </div>
+
+        {error && (
+          <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-center">
+            <p className="text-sm text-red-400">{error}</p>
+            <Button variant="secondary" size="sm" className="mt-2" onClick={fetchParrillas}>
+              Reintentar
+            </Button>
+          </div>
+        )}
 
         {loading && (
           <div className="space-y-4">

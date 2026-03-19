@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Plus, Users, Mail, Shield } from 'lucide-react'
 import { ROLE_LABELS } from '@/lib/constants'
+import { useToast } from '@/components/ui/toast'
 
 const ROLES = Object.keys(ROLE_LABELS)
 
@@ -30,18 +31,29 @@ function getRoleVariant(role: string) {
 export default function TeamPage() {
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'COMMUNITY' })
+  const { toast } = useToast()
 
   useEffect(() => {
-    fetch('/api/users')
-      .then(r => r.json())
-      .then(setUsers)
-      .catch(console.error)
-      .finally(() => setLoading(false))
+    fetchUsers()
   }, [])
+
+  function fetchUsers() {
+    setFetchError(null)
+    setLoading(true)
+    fetch('/api/users')
+      .then(r => {
+        if (!r.ok) throw new Error('Error al cargar usuarios')
+        return r.json()
+      })
+      .then(setUsers)
+      .catch(err => setFetchError(err.message))
+      .finally(() => setLoading(false))
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -56,14 +68,17 @@ export default function TeamPage() {
       if (res.ok) {
         setShowCreate(false)
         setForm({ name: '', email: '', password: '', role: 'COMMUNITY' })
+        toast('success', 'Miembro creado exitosamente')
         const data = await fetch('/api/users').then(r => r.json())
         setUsers(data)
       } else {
         const err = await res.json()
         setError(err.error)
+        toast('error', err.error || 'Error al crear miembro')
       }
     } catch (err: any) {
       setError(err.message)
+      toast('error', err.message)
     } finally {
       setCreating(false)
     }
@@ -79,6 +94,15 @@ export default function TeamPage() {
             <Plus className="h-4 w-4" /> Nuevo Miembro
           </Button>
         </div>
+
+        {fetchError && (
+          <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-center">
+            <p className="text-sm text-red-400">{fetchError}</p>
+            <Button variant="secondary" size="sm" className="mt-2" onClick={fetchUsers}>
+              Reintentar
+            </Button>
+          </div>
+        )}
 
         {loading && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

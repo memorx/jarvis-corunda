@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth-helpers'
 import prisma from '@/lib/db'
+import { validateBody } from '@/lib/validate'
+import { updateAccountSchema } from '@/lib/validations'
+import type { Platform, ContentType } from '@/generated/prisma/client'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('accounts:read')
+  if (!authCheck.success) return authCheck.response
 
   const { id } = await params
 
@@ -45,41 +46,38 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
-
-  const role = (session.user as any).role
-  if (!['SUPERADMIN', 'MANAGER'].includes(role)) {
-    return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
-  }
+  const authCheck = await requireAuth('accounts:write')
+  if (!authCheck.success) return authCheck.response
 
   const { id } = await params
 
   try {
     const body = await request.json()
+    const validation = validateBody(updateAccountSchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
+
     const account = await prisma.account.update({
       where: { id },
       data: {
-        name: body.name,
-        brandName: body.brandName,
-        industry: body.industry,
-        description: body.description,
-        brandVoice: body.brandVoice,
-        brandColors: body.brandColors,
-        targetAudience: body.targetAudience,
-        competitors: body.competitors,
-        guidelines: body.guidelines,
-        sampleCopies: body.sampleCopies,
-        platforms: body.platforms,
-        contentTypes: body.contentTypes,
-        monthlyBudget: body.monthlyBudget,
-        metaPageId: body.metaPageId,
-        metaAdAccountId: body.metaAdAccountId,
-        googleAdsId: body.googleAdsId,
-        tiktokAdAccountId: body.tiktokAdAccountId,
-        linkedinPageId: body.linkedinPageId,
+        name: data.name,
+        brandName: data.brandName,
+        industry: data.industry,
+        description: data.description,
+        brandVoice: data.brandVoice,
+        brandColors: data.brandColors,
+        targetAudience: data.targetAudience,
+        competitors: data.competitors,
+        guidelines: data.guidelines,
+        sampleCopies: data.sampleCopies,
+        platforms: data.platforms as Platform[],
+        contentTypes: data.contentTypes as ContentType[],
+        monthlyBudget: data.monthlyBudget,
+        metaPageId: data.metaPageId,
+        metaAdAccountId: data.metaAdAccountId,
+        googleAdsId: data.googleAdsId,
+        tiktokAdAccountId: data.tiktokAdAccountId,
+        linkedinPageId: data.linkedinPageId,
       },
     })
 
@@ -94,15 +92,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
-
-  const role = (session.user as any).role
-  if (role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
-  }
+  const authCheck = await requireAuth('accounts:write')
+  if (!authCheck.success) return authCheck.response
 
   const { id } = await params
 

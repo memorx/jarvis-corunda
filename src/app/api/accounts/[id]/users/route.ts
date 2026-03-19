@@ -1,30 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth-helpers'
 import prisma from '@/lib/db'
+import { validateBody } from '@/lib/validate'
+import { assignUserToAccountSchema } from '@/lib/validations'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
-
-  const role = (session.user as any).role
-  if (!['SUPERADMIN', 'MANAGER'].includes(role)) {
-    return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
-  }
+  const authCheck = await requireAuth('accounts:write')
+  if (!authCheck.success) return authCheck.response
 
   const { id } = await params
 
   try {
     const body = await request.json()
+    const validation = validateBody(assignUserToAccountSchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
+
     const accountUser = await prisma.accountUser.create({
       data: {
         accountId: id,
-        userId: body.userId,
-        role: body.role || 'support',
+        userId: data.userId,
+        role: data.role,
       },
     })
 
@@ -42,15 +41,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
-
-  const role = (session.user as any).role
-  if (!['SUPERADMIN', 'MANAGER'].includes(role)) {
-    return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
-  }
+  const authCheck = await requireAuth('accounts:write')
+  if (!authCheck.success) return authCheck.response
 
   const { id } = await params
   const { searchParams } = new URL(request.url)

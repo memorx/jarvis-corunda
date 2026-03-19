@@ -51,3 +51,20 @@ export function slugify(text: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)+/g, '')
 }
+
+export function timeAgo(date: Date | string): string {
+  const now = new Date()
+  const past = new Date(date)
+  const diffMs = now.getTime() - past.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'Justo ahora'
+  if (diffMins < 60) return `Hace ${diffMins} min`
+  if (diffHours < 24) return `Hace ${diffHours}h`
+  if (diffDays < 7) return `Hace ${diffDays}d`
+  if (diffDays < 30) return `Hace ${Math.floor(diffDays / 7)} sem`
+  const months = Math.floor(diffDays / 30)
+  return `Hace ${months} mes${months > 1 ? 'es' : ''}`
+}

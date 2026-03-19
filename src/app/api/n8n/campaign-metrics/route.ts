@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireApiKey } from '@/lib/auth-helpers'
 import prisma from '@/lib/db'
+import { validateBody } from '@/lib/validate'
+import { campaignMetricsSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
+  const keyCheck = requireApiKey(request)
+  if (!keyCheck.success) return keyCheck.response
+
   try {
     const body = await request.json()
+    const validation = validateBody(campaignMetricsSchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
 
-    const { campaignId, date, impressions, clicks, spend, conversions, leads, reach } = body
-
-    if (!campaignId || !date) {
-      return NextResponse.json({ error: 'campaignId and date are required' }, { status: 400 })
-    }
+    const { campaignId, date, impressions, clicks, spend, conversions, leads, reach } = data
 
     const ctr = impressions > 0 ? (clicks / impressions) * 100 : null
     const cpc = clicks > 0 ? spend / clicks : null
@@ -24,12 +29,12 @@ export async function POST(request: NextRequest) {
         },
       },
       update: {
-        impressions: impressions || 0,
-        clicks: clicks || 0,
-        spend: spend || 0,
-        conversions: conversions || 0,
-        leads: leads || 0,
-        reach: reach || 0,
+        impressions,
+        clicks,
+        spend,
+        conversions,
+        leads,
+        reach,
         ctr,
         cpc,
         cpm,
@@ -38,12 +43,12 @@ export async function POST(request: NextRequest) {
       create: {
         campaignId,
         date: new Date(date),
-        impressions: impressions || 0,
-        clicks: clicks || 0,
-        spend: spend || 0,
-        conversions: conversions || 0,
-        leads: leads || 0,
-        reach: reach || 0,
+        impressions,
+        clicks,
+        spend,
+        conversions,
+        leads,
+        reach,
         ctr,
         cpc,
         cpm,

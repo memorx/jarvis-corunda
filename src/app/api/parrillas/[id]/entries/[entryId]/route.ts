@@ -1,36 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth-helpers'
 import prisma from '@/lib/db'
+import { validateBody } from '@/lib/validate'
+import { updateEntrySchema } from '@/lib/validations'
+import type { Platform, ContentType, CampaignObjective, ContentStatus } from '@/generated/prisma/client'
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; entryId: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('parrillas:edit')
+  if (!authCheck.success) return authCheck.response
 
   const { entryId } = await params
 
   try {
     const body = await request.json()
+    const validation = validateBody(updateEntrySchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
+
     const entry = await prisma.parrillaEntry.update({
       where: { id: entryId },
       data: {
-        headline: body.headline,
-        primaryText: body.primaryText,
-        description: body.description,
-        ctaText: body.ctaText,
-        hashtags: body.hashtags,
-        visualConcept: body.visualConcept,
-        imagePrompt: body.imagePrompt,
-        publishDate: body.publishDate ? new Date(body.publishDate) : undefined,
-        publishTime: body.publishTime,
-        platform: body.platform,
-        contentType: body.contentType,
-        objective: body.objective,
-        status: body.status,
+        headline: data.headline,
+        primaryText: data.primaryText,
+        description: data.description,
+        ctaText: data.ctaText,
+        hashtags: data.hashtags,
+        visualConcept: data.visualConcept,
+        imagePrompt: data.imagePrompt,
+        publishDate: data.publishDate ? new Date(data.publishDate) : undefined,
+        publishTime: data.publishTime,
+        platform: data.platform as Platform,
+        contentType: data.contentType as ContentType,
+        objective: data.objective as CampaignObjective,
+        status: data.status as ContentStatus,
       },
       include: {
         assets: true,
@@ -52,10 +57,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; entryId: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('parrillas:edit')
+  if (!authCheck.success) return authCheck.response
 
   const { entryId } = await params
 

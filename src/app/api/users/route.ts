@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth-helpers'
 import { hash } from 'bcryptjs'
 import prisma from '@/lib/db'
+import { validateBody } from '@/lib/validate'
+import { createUserSchema } from '@/lib/validations'
+import type { UserRole } from '@/generated/prisma/client'
 
 export async function GET(request: NextRequest) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('team:read')
+  if (!authCheck.success) return authCheck.response
 
   try {
     const users = await prisma.user.findMany({
@@ -32,26 +33,23 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
-
-  const role = (session.user as any).role
-  if (role !== 'SUPERADMIN') {
-    return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
-  }
+  const authCheck = await requireAuth('team:write')
+  if (!authCheck.success) return authCheck.response
 
   try {
     const body = await request.json()
-    const hashedPassword = await hash(body.password, 12)
+    const validation = validateBody(createUserSchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
+
+    const hashedPassword = await hash(data.password, 12)
 
     const user = await prisma.user.create({
       data: {
-        email: body.email,
-        name: body.name,
+        email: data.email,
+        name: data.name,
         password: hashedPassword,
-        role: body.role || 'COMMUNITY',
+        role: data.role as UserRole,
       },
       select: {
         id: true,

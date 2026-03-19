@@ -1,31 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth-helpers'
 import prisma from '@/lib/db'
+import { validateBody } from '@/lib/validate'
+import { createApprovalSchema } from '@/lib/validations'
+import type { ApprovalType, ApprovalStatus, ParrillaStatus, ContentStatus } from '@/generated/prisma/client'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('approvals:create')
+  if (!authCheck.success) return authCheck.response
 
   const { id } = await params
 
   try {
     const body = await request.json()
-    const role = (session.user as any).role
-    const type = role === 'CLIENT' ? 'CLIENT' : 'INTERNAL'
+    const validation = validateBody(createApprovalSchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
+
+    const type = authCheck.role === 'CLIENT' ? 'CLIENT' : 'INTERNAL'
 
     const approval = await prisma.approval.create({
       data: {
-        userId: session.user.id,
-        parrillaId: body.entryId ? undefined : id,
-        entryId: body.entryId || undefined,
-        type: type as any,
-        status: body.status,
-        comment: body.comment,
+        userId: authCheck.userId,
+        parrillaId: data.entryId ? undefined : id,
+        entryId: data.entryId || undefined,
+        type: type as ApprovalType,
+        status: data.status as ApprovalStatus,
+        comment: data.comment,
       },
       include: {
         user: { select: { id: true, name: true } },
@@ -33,35 +37,35 @@ export async function POST(
     })
 
     // If approving the whole parrilla, update its status
-    if (!body.entryId && body.status === 'APPROVED') {
+    if (!data.entryId && data.status === 'APPROVED') {
       const newStatus = type === 'CLIENT' ? 'APPROVED' : 'APPROVED_INTERNAL'
       await prisma.parrilla.update({
         where: { id },
-        data: { status: newStatus as any },
+        data: { status: newStatus as ParrillaStatus },
       })
     }
 
     // If approving a single entry, update its status
-    if (body.entryId && body.status === 'APPROVED') {
+    if (data.entryId && data.status === 'APPROVED') {
       const newStatus = type === 'CLIENT' ? 'APPROVED' : 'APPROVED_INTERNAL'
       await prisma.parrillaEntry.update({
-        where: { id: body.entryId },
-        data: { status: newStatus as any },
+        where: { id: data.entryId },
+        data: { status: newStatus as ContentStatus },
       })
     }
 
     // If rejecting, update status
-    if (body.status === 'REJECTED' || body.status === 'REVISION_REQUESTED') {
-      if (body.entryId) {
+    if (data.status === 'REJECTED' || data.status === 'REVISION_REQUESTED') {
+      if (data.entryId) {
         await prisma.parrillaEntry.update({
-          where: { id: body.entryId },
-          data: { status: 'REVISION' as any },
+          where: { id: data.entryId },
+          data: { status: 'REVISION' as ContentStatus },
         })
       } else {
         const newStatus = type === 'CLIENT' ? 'CLIENT_REVISION' : 'REVISION'
         await prisma.parrilla.update({
           where: { id },
-          data: { status: newStatus as any },
+          data: { status: newStatus as ParrillaStatus },
         })
       }
     }

@@ -21,15 +21,27 @@ export function getImageDirectorUserPrompt(input: {
   aspectRatio: string
   style?: string
   brandName: string
+  funnelStage?: string
+  productInfo?: string
+  industry?: string
 }) {
-  return `Create a DALL-E prompt for the following:
+  return `Create a DALL-E prompt for a ${input.platform} ad:
 
 **Visual concept**: ${input.visualConcept}
 **Brand**: ${input.brandName}
+${input.industry ? `**Industry**: ${input.industry}` : ''}\
+${input.productInfo ? `\n**Product/Service**: ${input.productInfo}` : ''}
 **Brand colors**: ${input.brandColors.join(', ')}
 **Platform**: ${input.platform}
 **Aspect ratio**: ${input.aspectRatio}
 ${input.style ? `**Style preference**: ${input.style}` : ''}
+${input.funnelStage ? `**Funnel stage**: ${input.funnelStage} — ${
+  input.funnelStage === 'TOFU' ? 'Cold audience: focus on stopping the scroll, emotional/aspirational imagery, show the PROBLEM not the solution'
+  : input.funnelStage === 'MOFU' ? 'Warm audience: show social proof, real results, trust elements, before/after scenarios'
+  : 'Hot audience: product focus, urgency visual cues, direct offer visualization, clean CTA space'
+}` : ''}
+
+CRITICAL: The image must work as a scroll-stopping ad. The first impression in 0.5 seconds must communicate the core message visually. Leave clear space for text overlay.
 
 Generate the image prompt. Respond with this JSON:
 {

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
+import { hasPermission } from '@/lib/permissions'
 import { Avatar } from '@/components/ui/avatar'
 
 interface SidebarProps {
@@ -30,18 +31,22 @@ interface SidebarProps {
   }
 }
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Cuentas', href: '/dashboard/accounts', icon: Building2 },
-  { name: 'Rendimiento', href: '/dashboard/performance', icon: BarChart3 },
-  { name: 'AI Playground', href: '/dashboard/playground', icon: Sparkles },
-  { name: 'Equipo', href: '/dashboard/team', icon: Users },
-  { name: 'Configuración', href: '/dashboard/settings', icon: Settings },
+const allNavigation = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, permission: null },
+  { name: 'Cuentas', href: '/dashboard/accounts', icon: Building2, permission: 'accounts:read' },
+  { name: 'Rendimiento', href: '/dashboard/performance', icon: BarChart3, permission: 'performance:read' },
+  { name: 'AI Playground', href: '/dashboard/playground', icon: Sparkles, permission: 'playground:use' },
+  { name: 'Equipo', href: '/dashboard/team', icon: Users, permission: 'team:read' },
+  { name: 'Configuración', href: '/dashboard/settings', icon: Settings, permission: null },
 ]
 
 export function Sidebar({ user }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
+
+  const navigation = allNavigation.filter(
+    item => item.permission === null || hasPermission(user.role, item.permission)
+  )
 
   return (
     <aside

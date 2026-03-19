@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth-helpers'
 import prisma from '@/lib/db'
+import { validateBody } from '@/lib/validate'
+import { updateParrillaSchema } from '@/lib/validations'
+import type { ParrillaStatus } from '@/generated/prisma/client'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('parrillas:read')
+  if (!authCheck.success) return authCheck.response
 
   const { id } = await params
 
@@ -53,21 +54,23 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('parrillas:edit')
+  if (!authCheck.success) return authCheck.response
 
   const { id } = await params
 
   try {
     const body = await request.json()
+    const validation = validateBody(updateParrillaSchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
+
     const parrilla = await prisma.parrilla.update({
       where: { id },
       data: {
-        name: body.name,
-        description: body.description,
-        status: body.status,
+        name: data.name,
+        description: data.description,
+        status: data.status as ParrillaStatus,
       },
     })
 
@@ -82,10 +85,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('parrillas:edit')
+  if (!authCheck.success) return authCheck.response
 
   const { id } = await params
 

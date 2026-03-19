@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { getStrategySystemPrompt, getStrategyUserPrompt } from './prompts/strategy'
+import { buildAccountContext } from './context-builder'
 import prisma from '@/lib/db'
 
 const anthropic = new Anthropic({
@@ -19,6 +20,11 @@ export interface StrategyInput {
 export interface StrategyOutput {
   creative_concept: string
   key_message: string
+  selling_angles?: {
+    angle: string
+    hook: string
+    copy_direction: string
+  }[]
   emotional_hooks: string[]
   visual_direction: string
   content_pillars: string[]
@@ -28,7 +34,9 @@ export interface StrategyOutput {
     angle: string
     objective: string
     platforms: string[]
+    funnelStage?: string
   }[]
+  testing_plan?: string
 }
 
 export async function generateStrategy(input: StrategyInput): Promise<StrategyOutput> {
@@ -41,6 +49,9 @@ export async function generateStrategy(input: StrategyInput): Promise<StrategyOu
 
   if (!account) throw new Error('Cuenta no encontrada')
 
+  // Construir contexto enriquecido de documentos
+  const knowledgeBase = await buildAccountContext(input.accountId)
+
   const systemPrompt = getStrategySystemPrompt({
     brandName: account.brandName,
     industry: account.industry,
@@ -50,7 +61,13 @@ export async function generateStrategy(input: StrategyInput): Promise<StrategyOu
     guidelines: account.guidelines,
     sampleCopies: account.sampleCopies,
     brandColors: account.brandColors,
-  })
+    painPoints: account.painPoints,
+    differentiators: account.differentiators,
+    productInfo: account.productInfo,
+    priceRange: account.priceRange,
+    salesProcess: account.salesProcess,
+    websiteUrl: account.websiteUrl,
+  }) + knowledgeBase
 
   const userPrompt = getStrategyUserPrompt({
     month: input.month,

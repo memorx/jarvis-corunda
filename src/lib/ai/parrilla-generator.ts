@@ -35,6 +35,7 @@ interface EntryPlan {
   objective: string
   concept: string
   hookType: string
+  funnelStage: string
 }
 
 export async function generateParrilla(input: ParrillaGenerationInput) {
@@ -71,6 +72,19 @@ Distribución:
 
 Plataformas disponibles: ${input.platforms.map(p => PLATFORM_LABELS[p] || p).join(', ')}
 
+IMPORTANTE: Distribuye las entradas en las 3 etapas del embudo de ventas:
+- TOFU (frio/awareness): ~40% de las entradas
+- MOFU (tibio/consideracion): ~35% de las entradas
+- BOFU (caliente/conversion): ~25% de las entradas
+
+REGLAS DE ESTRUCTURA:
+- Cada campaña/ángulo debe tener MÍNIMO 2-3 variantes creativas (diferentes formatos o enfoques)
+- NO generes una sola pieza por ángulo — la plataforma necesita opciones para testear
+- Prioriza VIDEO sobre imagen estática — los videos suelen tener mejor performance en Meta
+- Para TOFU: usa hooks de problema/curiosidad, NO vendas directo
+- Para BOFU: sé directo con la oferta, precio, urgencia
+- Varía los formatos: no todas imágenes estáticas. Mezcla imagen + video + carrusel por ángulo
+
 Responde SOLO con JSON válido (array):
 [
   {
@@ -79,7 +93,8 @@ Responde SOLO con JSON válido (array):
     "contentType": "STATIC_IMAGE",
     "objective": "awareness|engagement|leads|conversions|traffic",
     "concept": "Descripción breve del concepto de esta pieza",
-    "hookType": "question|emotion|urgency|social_proof|humor|data"
+    "hookType": "question|emotion|urgency|social_proof|humor|data",
+    "funnelStage": "TOFU|MOFU|BOFU"
   }
 ]
 
@@ -124,6 +139,7 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
         hookType: plan.hookType,
         strategy,
         parrillaId: parrilla.id,
+        funnelStage: plan.funnelStage,
       })
 
       // Generate image prompt for non-video content
@@ -136,6 +152,7 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
             platform: plan.platform,
             aspectRatio: getDefaultAspectRatio(plan.platform),
             parrillaId: parrilla.id,
+            funnelStage: plan.funnelStage,
           })
         } catch (e) {
           console.error('Image prompt generation failed for entry:', e)
@@ -154,6 +171,7 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
             objective: plan.objective,
             strategy,
             parrillaId: parrilla.id,
+            funnelStage: plan.funnelStage,
           })
         } catch (e) {
           console.error('Video script generation failed for entry:', e)
@@ -175,6 +193,7 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
           visualConcept: plan.concept,
           imagePrompt: imagePrompt?.prompt || null,
           videoScript: videoScript as any,
+          funnelStage: plan.funnelStage || null,
           hookType: copy.hookType,
           aiReasoning: copy.reasoning,
           isPaid: input.isPaid,
@@ -212,12 +231,12 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
   }
 }
 
-function getMonthName(month: number): string {
+export function getMonthName(month: number): string {
   const names = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
   return names[month - 1] || ''
 }
 
-function getDefaultAspectRatio(platform: string): string {
+export function getDefaultAspectRatio(platform: string): string {
   const ratios: Record<string, string> = {
     META_FEED: '1:1',
     META_STORIES: '9:16',

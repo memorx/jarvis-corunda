@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { getCopywriterSystemPrompt, getCopyUserPrompt } from './prompts/copywriter'
+import { buildAccountContext } from './context-builder'
 import { PLATFORM_SPECS } from '@/lib/constants'
 import prisma from '@/lib/db'
 
@@ -17,6 +18,7 @@ export interface CopyInput {
   strategy?: any
   parrillaId?: string
   entryId?: string
+  funnelStage?: string
 }
 
 export interface CopyOutput {
@@ -29,7 +31,7 @@ export interface CopyOutput {
   reasoning: string
 }
 
-function getCharLimits(platform: string): Record<string, number> {
+export function getCharLimits(platform: string): Record<string, number> {
   const specs = PLATFORM_SPECS[platform as keyof typeof PLATFORM_SPECS]
   if (!specs) return { headline: 60, primaryText: 200, description: 100 }
 
@@ -55,13 +57,20 @@ export async function generateCopy(input: CopyInput): Promise<CopyOutput> {
 
   if (!account) throw new Error('Cuenta no encontrada')
 
+  // Construir contexto enriquecido de documentos
+  const knowledgeBase = await buildAccountContext(input.accountId)
+
   const systemPrompt = getCopywriterSystemPrompt({
     brandName: account.brandName,
     brandVoice: account.brandVoice,
     targetAudience: account.targetAudience,
     guidelines: account.guidelines,
     sampleCopies: account.sampleCopies,
-  })
+    painPoints: account.painPoints,
+    differentiators: account.differentiators,
+    productInfo: account.productInfo,
+    priceRange: account.priceRange,
+  }) + knowledgeBase
 
   const charLimits = getCharLimits(input.platform)
   const userPrompt = getCopyUserPrompt({
@@ -72,6 +81,7 @@ export async function generateCopy(input: CopyInput): Promise<CopyOutput> {
     hookType: input.hookType,
     strategy: input.strategy,
     charLimits,
+    funnelStage: input.funnelStage,
   })
 
   try {

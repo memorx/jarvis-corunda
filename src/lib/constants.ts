@@ -132,7 +132,7 @@ export const IMAGE_DIMENSIONS = {
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   SUPERADMIN: ['*'],
   MANAGER: ['accounts:read', 'accounts:write', 'parrillas:*', 'campaigns:*', 'team:read', 'playground:*', 'performance:*'],
-  COMMUNITY: ['accounts:read', 'parrillas:create', 'parrillas:edit', 'playground:*'],
+  COMMUNITY: ['accounts:read', 'parrillas:create', 'parrillas:edit', 'parrillas:read', 'playground:*'],
   TRAFFIC: ['accounts:read', 'campaigns:*', 'parrillas:read', 'performance:*', 'playground:*'],
   DESIGNER: ['parrillas:read', 'assets:upload'],
   PRODUCER: ['parrillas:read', 'assets:upload'],

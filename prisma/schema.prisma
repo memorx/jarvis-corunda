@@ -32,6 +32,7 @@ model User {
   createdParrillas Parrilla[]
   approvals        Approval[]
   comments         Comment[]
+  uploadedDocuments AccountDocument[]
 }
 
 model Account {
@@ -47,6 +48,21 @@ model Account {
   competitors    String?  @db.Text
   guidelines     String?  @db.Text
   sampleCopies   String?  @db.Text
+
+  websiteUrl     String?
+  instagramUrl   String?
+  facebookUrl    String?
+  tiktokUrl      String?
+  linkedinUrl    String?
+
+  painPoints     String?  @db.Text
+  differentiators String? @db.Text
+  productInfo    String?  @db.Text
+  priceRange     String?
+  salesProcess   String?  @db.Text
+
+  onboardingToken  String?  @unique
+  onboardingStatus String?
 
   metaPageId        String?
   metaAdAccountId   String?
@@ -66,6 +82,7 @@ model Account {
   users     AccountUser[]
   parrillas Parrilla[]
   campaigns Campaign[]
+  documents AccountDocument[]
 }
 
 model AccountUser {
@@ -173,6 +190,7 @@ model ParrillaEntry {
   isPaid     Boolean       @default(false)
   budget     Float?
 
+  funnelStage String?
   hookType    String?
   aiReasoning String? @db.Text
 
@@ -360,4 +378,25 @@ model AIGenerationLog {
   error    String?
 
   createdAt DateTime @default(now())
+}
+
+model AccountDocument {
+  id        String   @id @default(cuid())
+  accountId String
+
+  title     String
+  type      String   // 'kickoff', 'audit', 'strategy', 'dossier', 'brief', 'research', 'other'
+  content   String   @db.Text
+  summary   String?  @db.Text  // Resumen generado por AI para contexto compacto
+
+  charCount Int      @default(0)
+  isActive  Boolean  @default(true)  // Permite desactivar sin borrar
+
+  uploadedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  uploadedBy User?   @relation(fields: [uploadedById], references: [id])
 }

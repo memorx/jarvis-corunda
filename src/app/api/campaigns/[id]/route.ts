@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth-helpers'
 import prisma from '@/lib/db'
+import { validateBody } from '@/lib/validate'
+import { updateCampaignSchema } from '@/lib/validations'
+import type { Platform, CampaignObjective, CampaignStatus } from '@/generated/prisma/client'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('campaigns:read')
+  if (!authCheck.success) return authCheck.response
 
   const { id } = await params
 
@@ -44,26 +45,28 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('campaigns:write')
+  if (!authCheck.success) return authCheck.response
 
   const { id } = await params
 
   try {
     const body = await request.json()
+    const validation = validateBody(updateCampaignSchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
+
     const campaign = await prisma.campaign.update({
       where: { id },
       data: {
-        name: body.name,
-        platform: body.platform,
-        objective: body.objective,
-        dailyBudget: body.dailyBudget,
-        totalBudget: body.totalBudget,
-        status: body.status,
-        startDate: body.startDate ? new Date(body.startDate) : undefined,
-        endDate: body.endDate ? new Date(body.endDate) : undefined,
+        name: data.name,
+        platform: data.platform as Platform,
+        objective: data.objective as CampaignObjective,
+        dailyBudget: data.dailyBudget,
+        totalBudget: data.totalBudget,
+        status: data.status as CampaignStatus,
+        startDate: data.startDate ? new Date(data.startDate) : undefined,
+        endDate: data.endDate ? new Date(data.endDate) : undefined,
       },
     })
 

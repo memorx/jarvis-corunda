@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Header } from '@/components/layout/header'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,6 +22,18 @@ type Tab = 'copy' | 'image' | 'video'
 
 export default function PlaygroundPage() {
   const [activeTab, setActiveTab] = useState<Tab>('copy')
+  const [accounts, setAccounts] = useState<Array<{ id: string; brandName: string }>>([])
+  const [selectedAccountId, setSelectedAccountId] = useState('')
+
+  useEffect(() => {
+    fetch('/api/accounts')
+      .then(r => r.json())
+      .then((data) => {
+        setAccounts(data)
+        if (data.length === 1) setSelectedAccountId(data[0].id)
+      })
+      .catch(() => {})
+  }, [])
 
   // Copy generator state
   const [copyInput, setCopyInput] = useState({
@@ -62,7 +74,7 @@ export default function PlaygroundPage() {
       const res = await fetch('/api/ai/generate-copies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(copyInput),
+        body: JSON.stringify({ ...copyInput, accountId: selectedAccountId || copyInput.accountId }),
       })
       const data = await res.json()
       if (res.ok) setCopyResult(data)
@@ -81,7 +93,7 @@ export default function PlaygroundPage() {
       const res = await fetch('/api/ai/generate-image-prompts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(imageInput),
+        body: JSON.stringify({ ...imageInput, accountId: selectedAccountId || imageInput.accountId }),
       })
       const data = await res.json()
       if (res.ok) setImageResult(data)
@@ -100,7 +112,7 @@ export default function PlaygroundPage() {
       const res = await fetch('/api/ai/generate-video-scripts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(videoInput),
+        body: JSON.stringify({ ...videoInput, accountId: selectedAccountId || videoInput.accountId }),
       })
       const data = await res.json()
       if (res.ok) setVideoResult(data)
@@ -131,6 +143,21 @@ export default function PlaygroundPage() {
           <p className="text-[#94A3B8]">Genera contenido rápido sin crear una parrilla completa</p>
         </div>
 
+        {/* Account Selector */}
+        <div>
+          <label className="text-sm text-[#94A3B8] mb-1 block">Cuenta</label>
+          <select
+            value={selectedAccountId}
+            onChange={(e) => setSelectedAccountId(e.target.value)}
+            className="w-full max-w-xs rounded-lg border border-white/10 bg-[#1A1A2E] px-3 py-2 text-sm text-[#FAFAFA]"
+          >
+            <option value="">Selecciona una cuenta</option>
+            {accounts.map(a => (
+              <option key={a.id} value={a.id}>{a.brandName}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Tabs */}
         <div className="flex gap-1 border-b border-white/5">
           {tabs.map(tab => (
@@ -158,12 +185,6 @@ export default function PlaygroundPage() {
                 <CardDescription>Genera copies para cualquier plataforma</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Input
-                  label="ID de Cuenta (opcional)"
-                  placeholder="Deja vacío para copy genérico"
-                  value={copyInput.accountId}
-                  onChange={e => setCopyInput({...copyInput, accountId: e.target.value})}
-                />
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-[#94A3B8]">Plataforma</label>
                   <select
@@ -274,11 +295,6 @@ export default function PlaygroundPage() {
                 <CardDescription>Genera prompts optimizados para DALL-E</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Input
-                  label="ID de Cuenta (opcional)"
-                  value={imageInput.accountId}
-                  onChange={e => setImageInput({...imageInput, accountId: e.target.value})}
-                />
                 <Textarea
                   label="Concepto Visual"
                   placeholder="Describe qué quieres ver en la imagen..."
@@ -353,7 +369,6 @@ export default function PlaygroundPage() {
                 <CardDescription>Crea guiones escena por escena</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Input label="ID de Cuenta (opcional)" value={videoInput.accountId} onChange={e => setVideoInput({...videoInput, accountId: e.target.value})} />
                 <Textarea label="Concepto del Video" placeholder="¿De qué trata el video?" value={videoInput.concept} onChange={e => setVideoInput({...videoInput, concept: e.target.value})} className="min-h-[100px]" />
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-1.5">

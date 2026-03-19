@@ -1,25 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth-helpers'
 import { generateVideoScript } from '@/lib/ai/video-script-generator'
+import { validateBody } from '@/lib/validate'
+import { generateVideoScriptSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('playground:use')
+  if (!authCheck.success) return authCheck.response
 
   try {
     const body = await request.json()
-    const script = await generateVideoScript({
-      accountId: body.accountId,
-      concept: body.concept,
-      platform: body.platform,
-      duration: body.duration || '30s',
-      objective: body.objective,
-      strategy: body.strategy,
-      parrillaId: body.parrillaId,
-      entryId: body.entryId,
-    })
+    const validation = validateBody(generateVideoScriptSchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
+
+    const script = await generateVideoScript(data)
 
     return NextResponse.json(script)
   } catch (error: any) {

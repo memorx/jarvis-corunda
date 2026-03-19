@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth-helpers'
 import prisma from '@/lib/db'
+import { validateBody } from '@/lib/validate'
+import { createCampaignSchema } from '@/lib/validations'
+import type { Platform, CampaignObjective } from '@/generated/prisma/client'
 
 export async function GET(request: NextRequest) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('campaigns:read')
+  if (!authCheck.success) return authCheck.response
 
   const { searchParams } = new URL(request.url)
   const accountId = searchParams.get('accountId')
@@ -29,23 +30,25 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('campaigns:write')
+  if (!authCheck.success) return authCheck.response
 
   try {
     const body = await request.json()
+    const validation = validateBody(createCampaignSchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
+
     const campaign = await prisma.campaign.create({
       data: {
-        accountId: body.accountId,
-        name: body.name,
-        platform: body.platform,
-        objective: body.objective,
-        dailyBudget: body.dailyBudget,
-        totalBudget: body.totalBudget,
-        startDate: body.startDate ? new Date(body.startDate) : null,
-        endDate: body.endDate ? new Date(body.endDate) : null,
+        accountId: data.accountId,
+        name: data.name,
+        platform: data.platform as Platform,
+        objective: data.objective as CampaignObjective,
+        dailyBudget: data.dailyBudget,
+        totalBudget: data.totalBudget,
+        startDate: data.startDate ? new Date(data.startDate) : null,
+        endDate: data.endDate ? new Date(data.endDate) : null,
       },
     })
 

@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { getVideoDirectorSystemPrompt, getVideoDirectorUserPrompt } from './prompts/video-director'
+import { buildAccountContext } from './context-builder'
 import prisma from '@/lib/db'
 
 const anthropic = new Anthropic({
@@ -15,6 +16,7 @@ export interface VideoScriptInput {
   strategy?: any
   parrillaId?: string
   entryId?: string
+  funnelStage?: string
 }
 
 export interface VideoScene {
@@ -51,11 +53,16 @@ export async function generateVideoScript(input: VideoScriptInput): Promise<Vide
 
   if (!account) throw new Error('Cuenta no encontrada')
 
+  // Construir contexto enriquecido de documentos
+  const knowledgeBase = await buildAccountContext(input.accountId)
+
   const systemPrompt = getVideoDirectorSystemPrompt({
     brandName: account.brandName,
     brandVoice: account.brandVoice,
     targetAudience: account.targetAudience,
-  })
+    painPoints: account.painPoints,
+    productInfo: account.productInfo,
+  }) + knowledgeBase
 
   const userPrompt = getVideoDirectorUserPrompt({
     concept: input.concept,
@@ -63,6 +70,7 @@ export async function generateVideoScript(input: VideoScriptInput): Promise<Vide
     duration: input.duration,
     objective: input.objective,
     strategy: input.strategy,
+    funnelStage: input.funnelStage,
   })
 
   try {

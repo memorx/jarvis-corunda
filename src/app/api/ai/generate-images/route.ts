@@ -1,23 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth-helpers'
 import { generateImage } from '@/lib/ai/image-generator'
+import { validateBody } from '@/lib/validate'
+import { generateImageSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('playground:use')
+  if (!authCheck.success) return authCheck.response
 
   try {
     const body = await request.json()
-    const image = await generateImage({
-      prompt: body.prompt,
-      size: body.size || '1024x1024',
-      quality: body.quality || 'hd',
-      accountId: body.accountId,
-      parrillaId: body.parrillaId,
-      entryId: body.entryId,
-    })
+    const validation = validateBody(generateImageSchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
+
+    const image = await generateImage(data)
 
     return NextResponse.json(image)
   } catch (error: any) {

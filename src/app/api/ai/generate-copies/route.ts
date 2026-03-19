@@ -1,26 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth-helpers'
 import { generateCopy } from '@/lib/ai/copy-generator'
+import { validateBody } from '@/lib/validate'
+import { generateCopySchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('playground:use')
+  if (!authCheck.success) return authCheck.response
 
   try {
     const body = await request.json()
-    const copy = await generateCopy({
-      accountId: body.accountId,
-      platform: body.platform,
-      contentType: body.contentType,
-      objective: body.objective,
-      concept: body.concept,
-      hookType: body.hookType,
-      strategy: body.strategy,
-      parrillaId: body.parrillaId,
-      entryId: body.entryId,
-    })
+    const validation = validateBody(generateCopySchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
+
+    const copy = await generateCopy(data)
 
     return NextResponse.json(copy)
   } catch (error: any) {

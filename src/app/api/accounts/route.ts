@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { requireAuth } from '@/lib/auth-helpers'
 import prisma from '@/lib/db'
+import { validateBody } from '@/lib/validate'
+import { createAccountSchema } from '@/lib/validations'
+import type { Platform, ContentType } from '@/generated/prisma/client'
 
 export async function GET(request: NextRequest) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
+  const authCheck = await requireAuth('accounts:read')
+  if (!authCheck.success) return authCheck.response
 
   try {
-    const role = (session.user as any).role
-
     let accounts
-    if (role === 'CLIENT') {
+    if (authCheck.role === 'CLIENT') {
       accounts = await prisma.account.findMany({
         where: {
-          users: { some: { userId: session.user.id } },
+          users: { some: { userId: authCheck.userId } },
           isActive: true,
         },
         include: {
@@ -43,33 +42,30 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  }
-
-  const role = (session.user as any).role
-  if (!['SUPERADMIN', 'MANAGER'].includes(role)) {
-    return NextResponse.json({ error: 'Sin permisos' }, { status: 403 })
-  }
+  const authCheck = await requireAuth('accounts:write')
+  if (!authCheck.success) return authCheck.response
 
   try {
     const body = await request.json()
+    const validation = validateBody(createAccountSchema, body)
+    if (!validation.success) return validation.response
+    const data = validation.data
+
     const account = await prisma.account.create({
       data: {
-        name: body.name,
-        brandName: body.brandName,
-        industry: body.industry || null,
-        description: body.description || null,
-        brandVoice: body.brandVoice || null,
-        brandColors: body.brandColors || [],
-        targetAudience: body.targetAudience || null,
-        competitors: body.competitors || null,
-        guidelines: body.guidelines || null,
-        sampleCopies: body.sampleCopies || null,
-        platforms: body.platforms || [],
-        contentTypes: body.contentTypes || [],
-        monthlyBudget: body.monthlyBudget || null,
+        name: data.name,
+        brandName: data.brandName,
+        industry: data.industry || null,
+        description: data.description || null,
+        brandVoice: data.brandVoice || null,
+        brandColors: data.brandColors,
+        targetAudience: data.targetAudience || null,
+        competitors: data.competitors || null,
+        guidelines: data.guidelines || null,
+        sampleCopies: data.sampleCopies || null,
+        platforms: data.platforms as Platform[],
+        contentTypes: data.contentTypes as ContentType[],
+        monthlyBudget: data.monthlyBudget || null,
       },
     })
 

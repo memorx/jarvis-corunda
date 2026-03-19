@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { getImageDirectorSystemPrompt, getImageDirectorUserPrompt } from './prompts/image-director'
+import { buildAccountContext } from './context-builder'
 import prisma from '@/lib/db'
 
 const anthropic = new Anthropic({
@@ -14,6 +15,7 @@ export interface ImagePromptInput {
   style?: string
   parrillaId?: string
   entryId?: string
+  funnelStage?: string
 }
 
 export interface ImagePromptOutput {
@@ -33,7 +35,10 @@ export async function generateImagePrompt(input: ImagePromptInput): Promise<Imag
 
   if (!account) throw new Error('Cuenta no encontrada')
 
-  const systemPrompt = getImageDirectorSystemPrompt()
+  // Construir contexto enriquecido de documentos
+  const knowledgeBase = await buildAccountContext(input.accountId)
+
+  const systemPrompt = getImageDirectorSystemPrompt() + knowledgeBase
   const userPrompt = getImageDirectorUserPrompt({
     visualConcept: input.visualConcept,
     brandColors: account.brandColors,
@@ -41,6 +46,9 @@ export async function generateImagePrompt(input: ImagePromptInput): Promise<Imag
     aspectRatio: input.aspectRatio,
     style: input.style,
     brandName: account.brandName,
+    funnelStage: input.funnelStage,
+    productInfo: account.productInfo ?? undefined,
+    industry: account.industry ?? undefined,
   })
 
   try {

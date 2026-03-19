@@ -27,8 +27,12 @@ import {
   Loader2,
   CheckCircle,
   XCircle,
+  RefreshCw,
 } from 'lucide-react'
 import { PLATFORM_LABELS, CONTENT_TYPE_LABELS, STATUS_LABELS } from '@/lib/constants'
+import { CalendarView } from '@/components/parrilla/calendar-view'
+import { FileUpload } from '@/components/ui/file-upload'
+import { useToast } from '@/components/ui/toast'
 
 function getStatusVariant(status: string) {
   const map: Record<string, 'default' | 'success' | 'warning' | 'error' | 'secondary' | 'orange'> = {
@@ -55,24 +59,29 @@ export default function ParrillaDetailPage({
   const router = useRouter()
   const [parrilla, setParrilla] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
   const [selectedEntry, setSelectedEntry] = useState<any>(null)
   const [saving, setSaving] = useState(false)
   const [newComment, setNewComment] = useState('')
   const [sendingComment, setSendingComment] = useState(false)
+  const [regenerating, setRegenerating] = useState<string | null>(null)
+  const [regenInstructions, setRegenInstructions] = useState('')
+  const { toast } = useToast()
 
   useEffect(() => {
     fetchParrilla()
   }, [parrillaId])
 
   async function fetchParrilla() {
+    setFetchError(null)
     try {
       const res = await fetch(`/api/parrillas/${parrillaId}`)
-      if (!res.ok) throw new Error('Not found')
+      if (!res.ok) throw new Error('Error al cargar parrilla')
       const data = await res.json()
       setParrilla(data)
-    } catch (error) {
-      console.error('Error:', error)
+    } catch (error: any) {
+      setFetchError(error.message)
     } finally {
       setLoading(false)
     }
@@ -88,10 +97,13 @@ export default function ParrillaDetailPage({
         body: JSON.stringify(selectedEntry),
       })
       if (res.ok) {
+        toast('success', 'Entrada guardada')
         await fetchParrilla()
+      } else {
+        toast('error', 'Error al guardar entrada')
       }
     } catch (error) {
-      console.error('Error saving:', error)
+      toast('error', 'Error al guardar cambios')
     } finally {
       setSaving(false)
     }
@@ -108,14 +120,16 @@ export default function ParrillaDetailPage({
       })
       if (res.ok) {
         setNewComment('')
+        toast('success', 'Comentario agregado')
         await fetchParrilla()
-        // Refresh selected entry
         const updatedParrilla = await (await fetch(`/api/parrillas/${parrillaId}`)).json()
         const updatedEntry = updatedParrilla.entries.find((e: any) => e.id === selectedEntry.id)
         if (updatedEntry) setSelectedEntry(updatedEntry)
+      } else {
+        toast('error', 'Error al agregar comentario')
       }
     } catch (error) {
-      console.error('Error:', error)
+      toast('error', 'Error al enviar comentario')
     } finally {
       setSendingComment(false)
     }
@@ -123,14 +137,48 @@ export default function ParrillaDetailPage({
 
   async function approveEntry(entryId: string, status: string) {
     try {
-      await fetch(`/api/parrillas/${parrillaId}/approve`, {
+      const res = await fetch(`/api/parrillas/${parrillaId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entryId, status }),
       })
+      if (res.ok) {
+        toast('success', status === 'APPROVED' ? 'Entrada aprobada' : 'Revisión solicitada')
+      } else {
+        toast('error', 'Error al procesar aprobación')
+      }
       await fetchParrilla()
     } catch (error) {
-      console.error('Error:', error)
+      toast('error', 'Error al procesar aprobación')
+    }
+  }
+
+  async function regenerateEntry(what: 'copy' | 'imagePrompt' | 'videoScript' | 'all') {
+    if (!selectedEntry) return
+    setRegenerating(what)
+    try {
+      const res = await fetch(`/api/parrillas/${parrillaId}/entries/${selectedEntry.id}/regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ what, instructions: regenInstructions || undefined }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Error al regenerar')
+      }
+      const updated = await res.json()
+      setSelectedEntry(updated)
+      // Update the entry in the parrilla list too
+      setParrilla((prev: any) => ({
+        ...prev,
+        entries: prev.entries.map((e: any) => e.id === updated.id ? updated : e),
+      }))
+      setRegenInstructions('')
+      toast('success', `${what === 'all' ? 'Todo' : what === 'copy' ? 'Copy' : what === 'imagePrompt' ? 'Imagen' : 'Video script'} regenerado`)
+    } catch (error: any) {
+      toast('error', error.message || 'Error al regenerar')
+    } finally {
+      setRegenerating(null)
     }
   }
 
@@ -150,10 +198,18 @@ export default function ParrillaDetailPage({
     return (
       <>
         <Header title="Parrilla no encontrada" />
-        <div className="p-6">
+        <div className="p-6 space-y-4">
           <Button variant="ghost" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4" /> Volver
           </Button>
+          {fetchError && (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-center">
+              <p className="text-sm text-red-400">{fetchError}</p>
+              <Button variant="secondary" size="sm" className="mt-2" onClick={() => { setLoading(true); fetchParrilla() }}>
+                Reintentar
+              </Button>
+            </div>
+          )}
         </div>
       </>
     )
@@ -207,54 +263,75 @@ export default function ParrillaDetailPage({
 
         {/* Entries */}
         <div className="flex gap-6">
-          {/* Entry list */}
+          {/* Entry list / calendar */}
           <div className={selectedEntry ? 'w-1/2' : 'w-full'}>
-            <div className="space-y-2">
-              {entries.map((entry: any, i: number) => (
-                <div
-                  key={entry.id}
-                  onClick={() => setSelectedEntry(entry)}
-                  className={`rounded-lg border p-4 cursor-pointer transition-all ${
-                    selectedEntry?.id === entry.id
-                      ? 'border-cyan-500/50 bg-cyan-500/5'
-                      : 'border-white/5 bg-white/[0.02] hover:border-white/10'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-xs text-[#94A3B8]">
-                          {new Date(entry.publishDate).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
-                        </span>
-                        <Badge variant="secondary" className="text-[10px]">
-                          {PLATFORM_LABELS[entry.platform] || entry.platform}
-                        </Badge>
-                        <Badge variant={getStatusVariant(entry.status)} className="text-[10px]">
-                          {STATUS_LABELS[entry.status] || entry.status}
-                        </Badge>
-                        {['VIDEO_SHORT', 'VIDEO_LONG'].includes(entry.contentType) ? (
-                          <Video className="h-3 w-3 text-orange-400" />
-                        ) : (
-                          <Image className="h-3 w-3 text-cyan-400" />
+            {viewMode === 'list' ? (
+              <div className="space-y-2">
+                {entries.map((entry: any, i: number) => (
+                  <div
+                    key={entry.id}
+                    onClick={() => setSelectedEntry(entry)}
+                    className={`rounded-lg border p-4 cursor-pointer transition-all ${
+                      selectedEntry?.id === entry.id
+                        ? 'border-cyan-500/50 bg-cyan-500/5'
+                        : 'border-white/5 bg-white/[0.02] hover:border-white/10'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-xs text-[#94A3B8]">
+                            {new Date(entry.publishDate).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                          </span>
+                          <Badge variant="secondary" className="text-[10px]">
+                            {PLATFORM_LABELS[entry.platform] || entry.platform}
+                          </Badge>
+                          <Badge variant={getStatusVariant(entry.status)} className="text-[10px]">
+                            {STATUS_LABELS[entry.status] || entry.status}
+                          </Badge>
+                          {['VIDEO_SHORT', 'VIDEO_LONG'].includes(entry.contentType) ? (
+                            <Video className="h-3 w-3 text-orange-400" />
+                          ) : (
+                            <Image className="h-3 w-3 text-cyan-400" />
+                          )}
+                          {entry.funnelStage && (
+                            <Badge
+                              variant={
+                                entry.funnelStage === 'TOFU' ? 'default' :
+                                entry.funnelStage === 'MOFU' ? 'warning' : 'error'
+                              }
+                              className="text-[10px]"
+                            >
+                              {entry.funnelStage === 'TOFU' ? 'Frio' :
+                               entry.funnelStage === 'MOFU' ? 'Tibio' : 'Caliente'}
+                            </Badge>
+                          )}
+                        </div>
+                        <h4 className="font-medium text-[#FAFAFA] text-sm truncate">
+                          {entry.headline || entry.visualConcept || `Entrada ${i + 1}`}
+                        </h4>
+                        {entry.primaryText && (
+                          <p className="text-xs text-[#94A3B8] mt-1 line-clamp-1">{entry.primaryText}</p>
                         )}
                       </div>
-                      <h4 className="font-medium text-[#FAFAFA] text-sm truncate">
-                        {entry.headline || entry.visualConcept || `Entrada ${i + 1}`}
-                      </h4>
-                      {entry.primaryText && (
-                        <p className="text-xs text-[#94A3B8] mt-1 line-clamp-1">{entry.primaryText}</p>
+                      {entry.comments?.length > 0 && (
+                        <span className="flex items-center gap-1 text-xs text-[#94A3B8]">
+                          <MessageSquare className="h-3 w-3" />
+                          {entry.comments.length}
+                        </span>
                       )}
                     </div>
-                    {entry.comments?.length > 0 && (
-                      <span className="flex items-center gap-1 text-xs text-[#94A3B8]">
-                        <MessageSquare className="h-3 w-3" />
-                        {entry.comments.length}
-                      </span>
-                    )}
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <CalendarView
+                entries={entries}
+                month={parrilla.month || new Date().getMonth() + 1}
+                year={parrilla.year || new Date().getFullYear()}
+                onEntryClick={setSelectedEntry}
+              />
+            )}
           </div>
 
           {/* Entry detail slide-over */}
@@ -352,6 +429,95 @@ export default function ParrillaDetailPage({
                     >
                       <XCircle className="h-3 w-3" /> Revisión
                     </Button>
+                  </div>
+
+                  {/* Regeneration */}
+                  <div className="border-t border-white/5 pt-4">
+                    <details className="mt-0">
+                      <summary className="text-xs text-cyan-400 cursor-pointer">
+                        + Instrucciones para regenerar
+                      </summary>
+                      <Textarea
+                        placeholder="Ej: Hazlo mas urgente, enfoca en el precio, usa humor..."
+                        value={regenInstructions}
+                        onChange={(e) => setRegenInstructions(e.target.value)}
+                        className="mt-2 min-h-[60px]"
+                      />
+                    </details>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => regenerateEntry('copy')}
+                        disabled={!!regenerating}
+                      >
+                        {regenerating === 'copy' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                        Regenerar Copy
+                      </Button>
+                      {!['VIDEO_SHORT', 'VIDEO_LONG'].includes(selectedEntry.contentType) && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => regenerateEntry('imagePrompt')}
+                          disabled={!!regenerating}
+                        >
+                          {regenerating === 'imagePrompt' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                          Regenerar Imagen
+                        </Button>
+                      )}
+                      {['VIDEO_SHORT', 'VIDEO_LONG'].includes(selectedEntry.contentType) && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => regenerateEntry('videoScript')}
+                          disabled={!!regenerating}
+                        >
+                          {regenerating === 'videoScript' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                          Regenerar Video Script
+                        </Button>
+                      )}
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => regenerateEntry('all')}
+                        disabled={!!regenerating}
+                      >
+                        {regenerating === 'all' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                        Regenerar Todo
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Assets */}
+                  <div className="border-t border-white/5 pt-4">
+                    <h4 className="text-sm font-medium text-[#94A3B8] mb-3">
+                      Assets ({selectedEntry.assets?.length || 0})
+                    </h4>
+                    {selectedEntry.assets?.map((asset: any) => (
+                      <div key={asset.id} className="flex items-center gap-3 rounded-lg bg-white/5 p-2 mb-2">
+                        <Image className="h-4 w-4 text-[#94A3B8]" />
+                        <span className="text-sm text-[#FAFAFA] truncate flex-1">{asset.url?.split('/').pop() || asset.type}</span>
+                        <Badge variant="secondary" className="text-[10px]">{asset.type}</Badge>
+                      </div>
+                    ))}
+                    <FileUpload
+                      accept="image/*,video/*"
+                      multiple
+                      maxSize={25}
+                      onUpload={async (files) => {
+                        for (const file of files) {
+                          const formData = new FormData()
+                          formData.append('file', file)
+                          formData.append('entryId', selectedEntry.id)
+                          formData.append('fileName', file.name)
+                          formData.append('type', file.type.startsWith('video/') ? 'VIDEO' : 'IMAGE')
+                          await fetch('/api/assets/upload', { method: 'POST', body: formData })
+                        }
+                        toast('success', 'Assets subidos')
+                        await fetchParrilla()
+                      }}
+                      label="Subir imagen o video para esta entrada"
+                    />
                   </div>
 
                   {/* Comments */}
