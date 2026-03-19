@@ -1,8 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { generateStrategy, StrategyOutput } from './strategy-generator'
-import { generateCopy } from './copy-generator'
-import { generateImagePrompt } from './image-prompt-generator'
-import { generateVideoScript } from './video-script-generator'
+import { generateStrategy } from './strategy-generator'
 import prisma from '@/lib/db'
 import { PLATFORM_LABELS } from '@/lib/constants'
 import { cleanJsonResponse } from '@/lib/utils'
@@ -156,85 +153,10 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
     },
   })
 
-  // Step 5: Generate copies and create entries in parallel batches
-  const entries = await processBatch(entryPlans, 3, async (plan) => {
-    try {
-      // Generate copy
-      const copy = await generateCopy({
-        accountId: input.accountId,
-        platform: plan.platform,
-        contentType: plan.contentType,
-        objective: plan.objective,
-        concept: plan.concept,
-        hookType: plan.hookType,
-        strategy,
-        parrillaId: parrilla.id,
-        funnelStage: plan.funnelStage,
-      })
-
-      // Generate image prompt for non-video content
-      let imagePrompt = null
-      if (!['VIDEO_SHORT', 'VIDEO_LONG'].includes(plan.contentType)) {
-        try {
-          imagePrompt = await generateImagePrompt({
-            accountId: input.accountId,
-            visualConcept: plan.concept,
-            platform: plan.platform,
-            aspectRatio: getDefaultAspectRatio(plan.platform),
-            parrillaId: parrilla.id,
-            funnelStage: plan.funnelStage,
-          })
-        } catch (e) {
-          console.error('Image prompt generation failed for entry:', e)
-        }
-      }
-
-      // Generate video script for video content
-      let videoScript = null
-      if (['VIDEO_SHORT', 'VIDEO_LONG'].includes(plan.contentType)) {
-        try {
-          videoScript = await generateVideoScript({
-            accountId: input.accountId,
-            concept: plan.concept,
-            platform: plan.platform,
-            duration: plan.contentType === 'VIDEO_SHORT' ? '30s' : '60s',
-            objective: plan.objective,
-            strategy,
-            parrillaId: parrilla.id,
-            funnelStage: plan.funnelStage,
-          })
-        } catch (e) {
-          console.error('Video script generation failed for entry:', e)
-        }
-      }
-
-      return await prisma.parrillaEntry.create({
-        data: {
-          parrillaId: parrilla.id,
-          publishDate: new Date(plan.publishDate),
-          platform: plan.platform as any,
-          contentType: plan.contentType as any,
-          objective: plan.objective,
-          headline: copy.headline,
-          primaryText: copy.primaryText,
-          description: copy.description,
-          ctaText: copy.ctaText,
-          hashtags: copy.hashtags,
-          visualConcept: plan.concept,
-          imagePrompt: imagePrompt?.prompt || null,
-          videoScript: videoScript as any,
-          funnelStage: plan.funnelStage || null,
-          hookType: copy.hookType,
-          aiReasoning: copy.reasoning,
-          isPaid: input.isPaid,
-          budget: input.budget ? input.budget / totalEntries : null,
-          status: 'DRAFT',
-        },
-      })
-    } catch (error) {
-      console.error(`Failed to generate entry for ${plan.publishDate}:`, error)
-      // Create entry with partial data
-      return await prisma.parrillaEntry.create({
+  // Step 5: Create skeleton entries (no copies/images/videos — those are generated later per entry)
+  const entries = await Promise.all(
+    entryPlans.map((plan) =>
+      prisma.parrillaEntry.create({
         data: {
           parrillaId: parrilla.id,
           publishDate: new Date(plan.publishDate),
@@ -243,12 +165,14 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
           objective: plan.objective,
           visualConcept: plan.concept,
           hookType: plan.hookType,
+          funnelStage: plan.funnelStage || null,
           isPaid: input.isPaid,
+          budget: input.budget ? input.budget / totalEntries : null,
           status: 'DRAFT',
         },
       })
-    }
-  })
+    )
+  )
 
   return {
     parrillaId: parrilla.id,
@@ -256,16 +180,6 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
     entriesCreated: entries.length,
     totalPlanned: entryPlans.length,
   }
-}
-
-export async function processBatch<T, R>(items: T[], batchSize: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = []
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize)
-    const batchResults = await Promise.all(batch.map(fn))
-    results.push(...batchResults)
-  }
-  return results
 }
 
 export function getMonthName(month: number): string {

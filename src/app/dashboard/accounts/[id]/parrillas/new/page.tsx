@@ -66,6 +66,11 @@ export default function NewParrillaPage({ params }: { params: Promise<{ id: stri
   const [error, setError] = useState('')
   const { toast } = useToast()
 
+  // Step 3: Content generation per entry
+  const [contentStatus, setContentStatus] = useState<Record<string, 'pending' | 'generating' | 'done' | 'error'>>({})
+  const [contentProgress, setContentProgress] = useState({ current: 0, total: 0 })
+  const [generatingContent, setGeneratingContent] = useState(false)
+
   // Step 4: Image generation
   const [generatingImages, setGeneratingImages] = useState<Record<string, boolean>>({})
   const [generatedImages, setGeneratedImages] = useState<Record<string, string>>({})
@@ -173,15 +178,88 @@ export default function NewParrillaPage({ params }: { params: Promise<{ id: stri
       if (parrillaRes.ok) {
         const parrilla = await parrillaRes.json()
         setParrillaEntries(parrilla.entries || [])
+        // Initialize all entries as pending content generation
+        const initialStatus: Record<string, 'pending'> = {}
+        for (const entry of (parrilla.entries || [])) {
+          initialStatus[entry.id] = 'pending'
+        }
+        setContentStatus(initialStatus)
       }
 
       setCurrentStep(2)
-      toast('success', 'Parrilla generada exitosamente')
+      toast('success', 'Estructura de parrilla creada')
     } catch (err: any) {
       setError(err.message)
       toast('error', err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function generateEntryContent(entryId: string) {
+    if (!parrillaResult?.parrillaId) return
+    setContentStatus(prev => ({ ...prev, [entryId]: 'generating' }))
+    try {
+      const res = await fetch(
+        `/api/parrillas/${parrillaResult.parrillaId}/entries/${entryId}/regenerate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ what: 'all' }),
+        }
+      )
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Error al generar contenido')
+      }
+      const updatedEntry = await res.json()
+      // Update the entry in the list
+      setParrillaEntries(prev =>
+        prev.map(e => e.id === entryId ? updatedEntry : e)
+      )
+      setContentStatus(prev => ({ ...prev, [entryId]: 'done' }))
+    } catch (err: any) {
+      setContentStatus(prev => ({ ...prev, [entryId]: 'error' }))
+      console.error(`Content generation failed for entry ${entryId}:`, err)
+    }
+  }
+
+  async function generateAllContent() {
+    if (generatingContent) return
+    setGeneratingContent(true)
+    const pendingEntries = parrillaEntries.filter(e => contentStatus[e.id] !== 'done')
+    setContentProgress({ current: 0, total: pendingEntries.length })
+
+    let errorCount = 0
+    for (let i = 0; i < pendingEntries.length; i++) {
+      setContentProgress({ current: i + 1, total: pendingEntries.length })
+      setContentStatus(prev => ({ ...prev, [pendingEntries[i].id]: 'generating' }))
+      try {
+        const res = await fetch(
+          `/api/parrillas/${parrillaResult.parrillaId}/entries/${pendingEntries[i].id}/regenerate`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ what: 'all' }),
+          }
+        )
+        if (!res.ok) throw new Error('Error')
+        const updatedEntry = await res.json()
+        setParrillaEntries(prev =>
+          prev.map(e => e.id === pendingEntries[i].id ? updatedEntry : e)
+        )
+        setContentStatus(prev => ({ ...prev, [pendingEntries[i].id]: 'done' }))
+      } catch {
+        errorCount++
+        setContentStatus(prev => ({ ...prev, [pendingEntries[i].id]: 'error' }))
+      }
+    }
+
+    setGeneratingContent(false)
+    if (errorCount === 0) {
+      toast('success', 'Contenido generado para todas las entradas')
+    } else {
+      toast('warning', `${errorCount} entrada(s) tuvieron errores. Puedes regenerarlas individualmente.`)
     }
   }
 
@@ -643,9 +721,9 @@ export default function NewParrillaPage({ params }: { params: Promise<{ id: stri
                 </Button>
                 <Button onClick={generateFullParrilla} disabled={loading}>
                   {loading ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> Generando parrilla...</>
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Creando estructura...</>
                   ) : (
-                    <><ArrowRight className="h-4 w-4" /> Generar Parrilla Completa</>
+                    <><ArrowRight className="h-4 w-4" /> Crear Estructura de Parrilla</>
                   )}
                 </Button>
               </div>
@@ -653,61 +731,147 @@ export default function NewParrillaPage({ params }: { params: Promise<{ id: stri
           </div>
         )}
 
-        {/* Step 3: Preview */}
+        {/* Step 3: Preview + Content Generation */}
         {currentStep === 2 && (
           <div className="space-y-6">
+            {/* Progress bar */}
+            {generatingContent && (
+              <div className="rounded-lg bg-cyan-500/5 border border-cyan-500/20 p-4 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-cyan-400 flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generando contenido...
+                  </span>
+                  <span className="text-[#94A3B8]">
+                    {contentProgress.current} de {contentProgress.total}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-cyan-500 transition-all duration-500"
+                    style={{ width: `${contentProgress.total > 0 ? (contentProgress.current / contentProgress.total) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             <Card>
               <CardHeader>
-                <CardTitle>Parrilla Generada</CardTitle>
-                <CardDescription>
-                  {parrillaResult?.entriesCreated || 0} de {parrillaResult?.totalPlanned || 0} entradas generadas
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Estructura de Parrilla</CardTitle>
+                    <CardDescription>
+                      {parrillaEntries.length} entradas planificadas — genera el contenido (copies, prompts, scripts) para cada una
+                    </CardDescription>
+                  </div>
+                  <Button
+                    onClick={generateAllContent}
+                    disabled={generatingContent || parrillaEntries.every(e => contentStatus[e.id] === 'done')}
+                  >
+                    {generatingContent ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" /> Generando...</>
+                    ) : parrillaEntries.every(e => contentStatus[e.id] === 'done') ? (
+                      <><Check className="h-4 w-4" /> Todo generado</>
+                    ) : (
+                      <><Sparkles className="h-4 w-4" /> Generar Contenido para Todas</>
+                    )}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {parrillaEntries.map((entry: any, i: number) => (
-                    <div
-                      key={entry.id}
-                      className="rounded-lg border border-white/5 bg-white/5 p-4 hover:border-cyan-500/20 transition-colors"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge variant="secondary" className="text-[10px]">
-                              {new Date(entry.publishDate).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
-                            </Badge>
-                            <Badge className="text-[10px]">
-                              {PLATFORM_LABELS[entry.platform] || entry.platform}
-                            </Badge>
-                            <Badge variant="orange" className="text-[10px]">
-                              {entry.contentType.replace('_', ' ')}
-                            </Badge>
-                            {entry.funnelStage && (
-                              <Badge
-                                variant={
-                                  entry.funnelStage === 'TOFU' ? 'default' :
-                                  entry.funnelStage === 'MOFU' ? 'warning' : 'error'
-                                }
-                                className="text-[10px]"
-                              >
-                                {entry.funnelStage === 'TOFU' ? 'Frio' :
-                                 entry.funnelStage === 'MOFU' ? 'Tibio' : 'Caliente'}
+                  {parrillaEntries.map((entry: any, i: number) => {
+                    const status = contentStatus[entry.id] || 'pending'
+                    const hasContent = !!entry.headline || !!entry.primaryText
+
+                    return (
+                      <div
+                        key={entry.id}
+                        className={`rounded-lg border p-4 transition-colors ${
+                          status === 'done' || hasContent
+                            ? 'border-emerald-500/20 bg-emerald-500/5'
+                            : status === 'generating'
+                            ? 'border-cyan-500/30 bg-cyan-500/5'
+                            : status === 'error'
+                            ? 'border-red-500/20 bg-red-500/5'
+                            : 'border-white/5 bg-white/5'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Badge variant="secondary" className="text-[10px]">
+                                {new Date(entry.publishDate).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
                               </Badge>
+                              <Badge className="text-[10px]">
+                                {PLATFORM_LABELS[entry.platform] || entry.platform}
+                              </Badge>
+                              <Badge variant="orange" className="text-[10px]">
+                                {CONTENT_TYPE_LABELS[entry.contentType] || entry.contentType.replace('_', ' ')}
+                              </Badge>
+                              {entry.funnelStage && (
+                                <Badge
+                                  variant={
+                                    entry.funnelStage === 'TOFU' ? 'default' :
+                                    entry.funnelStage === 'MOFU' ? 'warning' : 'error'
+                                  }
+                                  className="text-[10px]"
+                                >
+                                  {entry.funnelStage === 'TOFU' ? 'Frio' :
+                                   entry.funnelStage === 'MOFU' ? 'Tibio' : 'Caliente'}
+                                </Badge>
+                              )}
+                              {/* Status indicator */}
+                              {status === 'generating' && (
+                                <Loader2 className="h-3 w-3 animate-spin text-cyan-400" />
+                              )}
+                              {(status === 'done' || hasContent) && (
+                                <CheckCircle className="h-3 w-3 text-emerald-400" />
+                              )}
+                              {status === 'error' && (
+                                <AlertTriangle className="h-3 w-3 text-red-400" />
+                              )}
+                            </div>
+                            <h4 className="font-medium text-[#FAFAFA]">
+                              {entry.headline || entry.visualConcept || `Entrada ${i + 1}`}
+                            </h4>
+                            {entry.primaryText && (
+                              <p className="text-sm text-[#94A3B8] mt-1 line-clamp-2">{entry.primaryText}</p>
+                            )}
+                            {!hasContent && status !== 'generating' && (
+                              <p className="text-xs text-[#94A3B8] mt-1 italic">
+                                {status === 'error' ? 'Error al generar — reintenta' : 'Sin contenido generado'}
+                              </p>
+                            )}
+                            {entry.hashtags?.length > 0 && (
+                              <p className="text-xs text-cyan-400 mt-2">{entry.hashtags.join(' ')}</p>
                             )}
                           </div>
-                          <h4 className="font-medium text-[#FAFAFA]">
-                            {entry.headline || entry.visualConcept || `Entrada ${i + 1}`}
-                          </h4>
-                          {entry.primaryText && (
-                            <p className="text-sm text-[#94A3B8] mt-1 line-clamp-2">{entry.primaryText}</p>
-                          )}
-                          {entry.hashtags?.length > 0 && (
-                            <p className="text-xs text-cyan-400 mt-2">{entry.hashtags.join(' ')}</p>
-                          )}
+                          <div className="ml-3">
+                            {(status === 'done' || hasContent) ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => generateEntryContent(entry.id)}
+                                disabled={status === 'generating'}
+                              >
+                                <RefreshCw className="h-3 w-3" /> Regenerar
+                              </Button>
+                            ) : status !== 'generating' ? (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => generateEntryContent(entry.id)}
+                                disabled={generatingContent}
+                              >
+                                <Sparkles className="h-3 w-3" /> Generar
+                              </Button>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -717,7 +881,10 @@ export default function NewParrillaPage({ params }: { params: Promise<{ id: stri
                 <ArrowLeft className="h-4 w-4" /> Volver a Estrategia
               </Button>
               <div className="flex gap-2">
-                <Button onClick={() => setCurrentStep(3)}>
+                <Button
+                  onClick={() => setCurrentStep(3)}
+                  disabled={generatingContent}
+                >
                   <ArrowRight className="h-4 w-4" /> Continuar a Assets
                 </Button>
               </div>

@@ -1,11 +1,8 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { mockAccount } from './_test-helpers'
 
-// MOCK: generators individuales — no mockeamos SDKs, solo los generators ya testeados
+// MOCK: strategy generator — the only AI generator still called by generateParrilla
 vi.mock('@/lib/ai/strategy-generator')
-vi.mock('@/lib/ai/copy-generator')
-vi.mock('@/lib/ai/image-prompt-generator')
-vi.mock('@/lib/ai/video-script-generator')
 vi.mock('@/lib/db')
 vi.mock('@/lib/ai/context-builder', () => ({
   buildAccountContext: vi.fn().mockResolvedValue(''),
@@ -21,9 +18,6 @@ vi.mock('@anthropic-ai/sdk', () => ({
 
 import prisma from '@/lib/db'
 import { generateStrategy } from '../strategy-generator'
-import { generateCopy } from '../copy-generator'
-import { generateImagePrompt } from '../image-prompt-generator'
-import { generateVideoScript } from '../video-script-generator'
 import { generateParrilla, normalizeContentType, normalizePlatform } from '../parrilla-generator'
 
 const mockInput = {
@@ -80,31 +74,6 @@ const mockEntryPlans = [
   },
 ]
 
-const mockCopy = {
-  headline: 'Test Headline',
-  primaryText: 'Test text',
-  description: 'Test desc',
-  ctaText: 'Buy now',
-  hashtags: ['#test'],
-  hookType: 'emotion',
-  reasoning: 'Because reasons',
-}
-
-const mockImagePrompt = {
-  prompt: 'A professional photo',
-  negativePrompt: 'No text',
-  style: 'photographic',
-  textOverlaySuggestion: 'Great deal',
-  textPlacement: 'bottom',
-}
-
-const mockVideoScript = {
-  variants: [
-    { style: 'produced', hook: 'Hook', scenes: [], ctaScene: { visual: '', textOverlay: '', audio: '' }, musicSuggestion: '', productionNotes: '' },
-    { style: 'ugc', hook: 'UGC Hook', scenes: [], ctaScene: { visual: '', textOverlay: '', audio: '' }, musicSuggestion: '', productionNotes: '' },
-  ],
-}
-
 describe('generateParrilla', () => {
   let entryCounter: number
 
@@ -112,11 +81,8 @@ describe('generateParrilla', () => {
     vi.clearAllMocks()
     entryCounter = 0
 
-    // MOCK: generators
+    // MOCK: strategy generator
     ;(generateStrategy as Mock).mockResolvedValue(mockStrategy)
-    ;(generateCopy as Mock).mockResolvedValue(mockCopy)
-    ;(generateImagePrompt as Mock).mockResolvedValue(mockImagePrompt)
-    ;(generateVideoScript as Mock).mockResolvedValue(mockVideoScript)
 
     // MOCK: Prisma
     vi.mocked(prisma.account.findUnique).mockResolvedValue(mockAccount as any)
@@ -134,7 +100,7 @@ describe('generateParrilla', () => {
     })
   })
 
-  it('debe orquestar la generación completa de una parrilla', async () => {
+  it('debe crear parrilla con skeleton entries (sin copy/image/video)', async () => {
     const result = await generateParrilla(mockInput)
 
     expect(result).toEqual({
@@ -150,15 +116,6 @@ describe('generateParrilla', () => {
       expect.objectContaining({ accountId: 'acc-1' })
     )
 
-    // generateCopy llamado 3 veces (una por entry)
-    expect(generateCopy).toHaveBeenCalledTimes(3)
-
-    // generateImagePrompt llamado 2 veces (solo STATIC_IMAGE, no VIDEO_SHORT)
-    expect(generateImagePrompt).toHaveBeenCalledTimes(2)
-
-    // generateVideoScript llamado 1 vez (solo VIDEO_SHORT)
-    expect(generateVideoScript).toHaveBeenCalledTimes(1)
-
     // Parrilla creada con nombre que contiene mes y año
     expect(prisma.parrilla.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -166,8 +123,22 @@ describe('generateParrilla', () => {
       }),
     })
 
-    // 3 entries creadas
+    // 3 skeleton entries creadas
     expect(prisma.parrillaEntry.create).toHaveBeenCalledTimes(3)
+
+    // Entries son skeleton: tienen visualConcept pero NO headline/primaryText/imagePrompt/videoScript
+    const calls = vi.mocked(prisma.parrillaEntry.create).mock.calls
+    for (const call of calls) {
+      const data = (call[0] as any).data
+      expect(data.visualConcept).toBeDefined()
+      expect(data.hookType).toBeDefined()
+      expect(data.status).toBe('DRAFT')
+      // Campos de contenido NO presentes en skeleton
+      expect(data.headline).toBeUndefined()
+      expect(data.primaryText).toBeUndefined()
+      expect(data.imagePrompt).toBeUndefined()
+      expect(data.videoScript).toBeUndefined()
+    }
   })
 
   it('debe calcular el presupuesto por entrada correctamente', async () => {
@@ -179,56 +150,10 @@ describe('generateParrilla', () => {
     }
   })
 
-  it('debe crear entries parciales si generateCopy falla para una entry', async () => {
-    ;(generateCopy as Mock)
-      .mockResolvedValueOnce(mockCopy)
-      .mockRejectedValueOnce(new Error('API error'))
-      .mockResolvedValueOnce(mockCopy)
-
-    const result = await generateParrilla(mockInput)
-
-    // Las 3 entries se crean (el error no detiene el loop)
-    expect(prisma.parrillaEntry.create).toHaveBeenCalledTimes(3)
-    expect(result.entriesCreated).toBe(3)
-
-    // Una entry se crea con datos parciales (sin headline) — con batches paralelos el orden de calls puede variar
-    const allCalls = vi.mocked(prisma.parrillaEntry.create).mock.calls
-    const partialEntry = allCalls.find(call => (call[0] as any).data.headline === undefined)
-    expect(partialEntry).toBeDefined()
-    expect((partialEntry![0] as any).data.primaryText).toBeUndefined()
-    expect((partialEntry![0] as any).data.visualConcept).toBe('Behind the scenes')
-  })
-
-  it('debe continuar si generateImagePrompt falla (non-blocking)', async () => {
-    ;(generateImagePrompt as Mock).mockRejectedValue(new Error('Image error'))
-
-    const result = await generateParrilla(mockInput)
-
-    // Entries se crean igual
-    expect(prisma.parrillaEntry.create).toHaveBeenCalledTimes(3)
-    expect(result.entriesCreated).toBe(3)
-
-    // Las entries de imagen se crean con imagePrompt null
-    const staticImageCalls = vi.mocked(prisma.parrillaEntry.create).mock.calls
-      .filter((call) => {
-        const data = (call[0] as any).data
-        return data.contentType !== 'VIDEO_SHORT'
-      })
-    for (const call of staticImageCalls) {
-      expect((call[0] as any).data.imagePrompt).toBeNull()
-    }
-  })
-
   it('debe lanzar error si la cuenta no existe', async () => {
     vi.mocked(prisma.account.findUnique).mockResolvedValue(null)
 
-    // generateStrategy también lanza error cuando la cuenta no existe
-    ;(generateStrategy as Mock).mockRejectedValue(new Error('Cuenta no encontrada'))
-
     await expect(generateParrilla(mockInput)).rejects.toThrow('Cuenta no encontrada')
-
-    // generateStrategy se llama antes del findUnique del orchestrator
-    // pero el orchestrator depende de la strategy, así que el error burbujea
   })
 
   it('debe pasar isPaid a las entries', async () => {
@@ -273,6 +198,31 @@ describe('generateParrilla', () => {
     const data = (call[0] as any).data
     expect(data.platform).toBe('META_FEED')
     expect(data.contentType).toBe('VIDEO_SHORT')
+  })
+
+  it('debe incluir funnelStage y hookType en skeleton entries', async () => {
+    const plansWithFunnel = [
+      {
+        publishDate: '2025-03-05',
+        platform: 'META_FEED',
+        contentType: 'STATIC_IMAGE',
+        objective: 'awareness',
+        concept: 'Product showcase',
+        hookType: 'emotion',
+        funnelStage: 'TOFU',
+      },
+    ]
+    createMock.mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(plansWithFunnel) }],
+      usage: { input_tokens: 100, output_tokens: 200 },
+    })
+
+    await generateParrilla(mockInput)
+
+    const call = vi.mocked(prisma.parrillaEntry.create).mock.calls[0]
+    const data = (call[0] as any).data
+    expect(data.funnelStage).toBe('TOFU')
+    expect(data.hookType).toBe('emotion')
   })
 })
 
