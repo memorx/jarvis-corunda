@@ -67,6 +67,9 @@ export default function ParrillaDetailPage({
   const [sendingComment, setSendingComment] = useState(false)
   const [regenerating, setRegenerating] = useState<string | null>(null)
   const [regenInstructions, setRegenInstructions] = useState('')
+  const [bulkGenerating, setBulkGenerating] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 })
+  const [statusUpdating, setStatusUpdating] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -182,6 +185,72 @@ export default function ParrillaDetailPage({
     }
   }
 
+  async function generateAllContent() {
+    if (bulkGenerating) return
+    const pending = entries.filter((e: any) => !e.headline)
+    if (pending.length === 0) {
+      toast('success', 'Todas las entradas ya tienen contenido')
+      return
+    }
+    setBulkGenerating(true)
+    setBulkProgress({ current: 0, total: pending.length })
+    let errorCount = 0
+
+    for (let i = 0; i < pending.length; i++) {
+      setBulkProgress({ current: i + 1, total: pending.length })
+      try {
+        const res = await fetch(`/api/parrillas/${parrillaId}/entries/${pending[i].id}/regenerate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ what: 'all' }),
+        })
+        if (!res.ok) throw new Error('Error')
+        const updated = await res.json()
+        setParrilla((prev: any) => ({
+          ...prev,
+          entries: prev.entries.map((e: any) => e.id === updated.id ? updated : e),
+        }))
+      } catch {
+        errorCount++
+      }
+      if (i < pending.length - 1) {
+        await new Promise(r => setTimeout(r, 500))
+      }
+    }
+
+    setBulkGenerating(false)
+    const success = pending.length - errorCount
+    if (errorCount === 0) {
+      toast('success', `${success} de ${pending.length} generadas`)
+    } else {
+      toast('warning', `${success} de ${pending.length} generadas (${errorCount} errores)`)
+    }
+    await fetchParrilla()
+  }
+
+  async function updateParrillaStatus(newStatus: string) {
+    setStatusUpdating(true)
+    try {
+      const res = await fetch(`/api/parrillas/${parrillaId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (!res.ok) throw new Error('Error al actualizar status')
+      const labels: Record<string, string> = {
+        INTERNAL_REVIEW: 'Enviada a revisión interna',
+        CLIENT_REVIEW: 'Enviada a revisión de cliente',
+        COMPLETED: 'Marcada como completada',
+      }
+      toast('success', labels[newStatus] || 'Status actualizado')
+      await fetchParrilla()
+    } catch (err: any) {
+      toast('error', err.message || 'Error al actualizar status')
+    } finally {
+      setStatusUpdating(false)
+    }
+  }
+
   if (loading) {
     return (
       <>
@@ -260,6 +329,87 @@ export default function ParrillaDetailPage({
             </CardHeader>
           </Card>
         )}
+
+        {/* Content progress indicator */}
+        {(() => {
+          const withContent = entries.filter((e: any) => !!e.headline).length
+          const total = entries.length
+          const pct = total > 0 ? Math.round((withContent / total) * 100) : 0
+          return (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-[#94A3B8]">
+                  {withContent} de {total} entries con contenido generado
+                </span>
+                <span className="text-[#94A3B8]">{pct}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-cyan-500 transition-all duration-500"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Bulk generation progress */}
+        {bulkGenerating && (
+          <div className="rounded-lg bg-cyan-500/5 border border-cyan-500/20 p-4 space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-cyan-400 flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Generando contenido...
+              </span>
+              <span className="text-[#94A3B8]">
+                {bulkProgress.current} de {bulkProgress.total}
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-cyan-500 transition-all duration-500"
+                style={{ width: `${bulkProgress.total > 0 ? (bulkProgress.current / bulkProgress.total) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Action bar */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Generate all content button */}
+          {entries.some((e: any) => !e.headline) && (
+            <Button
+              onClick={generateAllContent}
+              disabled={bulkGenerating}
+            >
+              {bulkGenerating ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Generando {bulkProgress.current}/{bulkProgress.total}...</>
+              ) : (
+                <><Sparkles className="h-4 w-4" /> Generar Contenido para Todas</>
+              )}
+            </Button>
+          )}
+
+          {/* Status action buttons */}
+          {parrilla.status === 'DRAFT' && (
+            <Button variant="secondary" onClick={() => updateParrillaStatus('INTERNAL_REVIEW')} disabled={statusUpdating}>
+              {statusUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Enviar a Revisión Interna
+            </Button>
+          )}
+          {['INTERNAL_REVIEW', 'APPROVED_INTERNAL'].includes(parrilla.status) && (
+            <Button variant="secondary" onClick={() => updateParrillaStatus('CLIENT_REVIEW')} disabled={statusUpdating}>
+              {statusUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+              Enviar a Revisión Cliente
+            </Button>
+          )}
+          {['CLIENT_REVIEW', 'APPROVED'].includes(parrilla.status) && (
+            <Button variant="secondary" onClick={() => updateParrillaStatus('COMPLETED')} disabled={statusUpdating}>
+              {statusUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              Marcar como Completada
+            </Button>
+          )}
+        </div>
 
         {/* Entries */}
         <div className="flex gap-6">
