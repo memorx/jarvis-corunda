@@ -39,6 +39,31 @@ interface EntryPlan {
   funnelStage: string
 }
 
+export function normalizeContentType(type: string): string {
+  const map: Record<string, string> = {
+    'VIDEO': 'VIDEO_SHORT',
+    'IMAGE': 'STATIC_IMAGE',
+    'STATIC': 'STATIC_IMAGE',
+    'REEL': 'VIDEO_SHORT',
+    'STORY': 'STORY',
+    'STORIES': 'STORY',
+  }
+  return map[type.toUpperCase()] || type
+}
+
+export function normalizePlatform(platform: string): string {
+  const map: Record<string, string> = {
+    'META': 'META_FEED',
+    'FACEBOOK': 'META_FEED',
+    'INSTAGRAM': 'META_FEED',
+    'INSTAGRAM_REELS': 'META_REELS',
+    'INSTAGRAM_STORIES': 'META_STORIES',
+    'GOOGLE': 'GOOGLE_SEARCH',
+    'YOUTUBE': 'GOOGLE_YOUTUBE',
+  }
+  return map[platform.toUpperCase()] || platform
+}
+
 export async function generateParrilla(input: ParrillaGenerationInput) {
   // Step 1: Load account
   const account = await prisma.account.findUnique({
@@ -109,7 +134,12 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
 
   const planContent = planResponse.content[0]
   if (planContent.type !== 'text') throw new Error('Unexpected response type')
-  const entryPlans: EntryPlan[] = JSON.parse(cleanJsonResponse(planContent.text))
+  const rawPlans: EntryPlan[] = JSON.parse(cleanJsonResponse(planContent.text))
+  const entryPlans = rawPlans.map(plan => ({
+    ...plan,
+    platform: normalizePlatform(plan.platform),
+    contentType: normalizeContentType(plan.contentType),
+  }))
 
   // Step 4: Create parrilla in DB
   const parrilla = await prisma.parrilla.create({

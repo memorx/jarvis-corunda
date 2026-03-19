@@ -24,7 +24,7 @@ import { generateStrategy } from '../strategy-generator'
 import { generateCopy } from '../copy-generator'
 import { generateImagePrompt } from '../image-prompt-generator'
 import { generateVideoScript } from '../video-script-generator'
-import { generateParrilla } from '../parrilla-generator'
+import { generateParrilla, normalizeContentType, normalizePlatform } from '../parrilla-generator'
 
 const mockInput = {
   accountId: 'acc-1',
@@ -249,5 +249,105 @@ describe('generateParrilla', () => {
     for (const call of calls) {
       expect((call[0] as any).data.budget).toBeNull()
     }
+  })
+
+  it('debe normalizar contentType y platform del plan AI', async () => {
+    const rawPlans = [
+      {
+        publishDate: '2025-03-05',
+        platform: 'INSTAGRAM',
+        contentType: 'VIDEO',
+        objective: 'awareness',
+        concept: 'Test',
+        hookType: 'emotion',
+      },
+    ]
+    createMock.mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify(rawPlans) }],
+      usage: { input_tokens: 100, output_tokens: 200 },
+    })
+
+    await generateParrilla(mockInput)
+
+    const call = vi.mocked(prisma.parrillaEntry.create).mock.calls[0]
+    const data = (call[0] as any).data
+    expect(data.platform).toBe('META_FEED')
+    expect(data.contentType).toBe('VIDEO_SHORT')
+  })
+})
+
+describe('normalizeContentType', () => {
+  it('maps VIDEO to VIDEO_SHORT', () => {
+    expect(normalizeContentType('VIDEO')).toBe('VIDEO_SHORT')
+  })
+
+  it('maps IMAGE to STATIC_IMAGE', () => {
+    expect(normalizeContentType('IMAGE')).toBe('STATIC_IMAGE')
+  })
+
+  it('maps STATIC to STATIC_IMAGE', () => {
+    expect(normalizeContentType('STATIC')).toBe('STATIC_IMAGE')
+  })
+
+  it('maps REEL to VIDEO_SHORT', () => {
+    expect(normalizeContentType('REEL')).toBe('VIDEO_SHORT')
+  })
+
+  it('maps STORIES to STORY', () => {
+    expect(normalizeContentType('STORIES')).toBe('STORY')
+  })
+
+  it('is case-insensitive', () => {
+    expect(normalizeContentType('video')).toBe('VIDEO_SHORT')
+    expect(normalizeContentType('Image')).toBe('STATIC_IMAGE')
+  })
+
+  it('passes through valid enum values unchanged', () => {
+    expect(normalizeContentType('STATIC_IMAGE')).toBe('STATIC_IMAGE')
+    expect(normalizeContentType('VIDEO_SHORT')).toBe('VIDEO_SHORT')
+    expect(normalizeContentType('VIDEO_LONG')).toBe('VIDEO_LONG')
+    expect(normalizeContentType('CAROUSEL')).toBe('CAROUSEL')
+  })
+})
+
+describe('normalizePlatform', () => {
+  it('maps META to META_FEED', () => {
+    expect(normalizePlatform('META')).toBe('META_FEED')
+  })
+
+  it('maps FACEBOOK to META_FEED', () => {
+    expect(normalizePlatform('FACEBOOK')).toBe('META_FEED')
+  })
+
+  it('maps INSTAGRAM to META_FEED', () => {
+    expect(normalizePlatform('INSTAGRAM')).toBe('META_FEED')
+  })
+
+  it('maps INSTAGRAM_REELS to META_REELS', () => {
+    expect(normalizePlatform('INSTAGRAM_REELS')).toBe('META_REELS')
+  })
+
+  it('maps INSTAGRAM_STORIES to META_STORIES', () => {
+    expect(normalizePlatform('INSTAGRAM_STORIES')).toBe('META_STORIES')
+  })
+
+  it('maps GOOGLE to GOOGLE_SEARCH', () => {
+    expect(normalizePlatform('GOOGLE')).toBe('GOOGLE_SEARCH')
+  })
+
+  it('maps YOUTUBE to GOOGLE_YOUTUBE', () => {
+    expect(normalizePlatform('YOUTUBE')).toBe('GOOGLE_YOUTUBE')
+  })
+
+  it('is case-insensitive', () => {
+    expect(normalizePlatform('facebook')).toBe('META_FEED')
+    expect(normalizePlatform('Instagram')).toBe('META_FEED')
+  })
+
+  it('passes through valid enum values unchanged', () => {
+    expect(normalizePlatform('META_FEED')).toBe('META_FEED')
+    expect(normalizePlatform('META_REELS')).toBe('META_REELS')
+    expect(normalizePlatform('TIKTOK')).toBe('TIKTOK')
+    expect(normalizePlatform('LINKEDIN')).toBe('LINKEDIN')
   })
 })
