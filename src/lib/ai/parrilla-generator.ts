@@ -156,9 +156,8 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
     },
   })
 
-  // Step 5: Generate copies and create entries
-  const entries = []
-  for (const plan of entryPlans) {
+  // Step 5: Generate copies and create entries in parallel batches
+  const entries = await processBatch(entryPlans, 3, async (plan) => {
     try {
       // Generate copy
       const copy = await generateCopy({
@@ -209,7 +208,7 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
         }
       }
 
-      const entry = await prisma.parrillaEntry.create({
+      return await prisma.parrillaEntry.create({
         data: {
           parrillaId: parrilla.id,
           publishDate: new Date(plan.publishDate),
@@ -232,12 +231,10 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
           status: 'DRAFT',
         },
       })
-
-      entries.push(entry)
     } catch (error) {
       console.error(`Failed to generate entry for ${plan.publishDate}:`, error)
       // Create entry with partial data
-      const entry = await prisma.parrillaEntry.create({
+      return await prisma.parrillaEntry.create({
         data: {
           parrillaId: parrilla.id,
           publishDate: new Date(plan.publishDate),
@@ -250,9 +247,8 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
           status: 'DRAFT',
         },
       })
-      entries.push(entry)
     }
-  }
+  })
 
   return {
     parrillaId: parrilla.id,
@@ -260,6 +256,16 @@ Distribuye las publicaciones de manera uniforme a lo largo del mes. Varía los t
     entriesCreated: entries.length,
     totalPlanned: entryPlans.length,
   }
+}
+
+export async function processBatch<T, R>(items: T[], batchSize: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = []
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize)
+    const batchResults = await Promise.all(batch.map(fn))
+    results.push(...batchResults)
+  }
+  return results
 }
 
 export function getMonthName(month: number): string {

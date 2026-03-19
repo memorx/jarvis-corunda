@@ -191,12 +191,12 @@ describe('generateParrilla', () => {
     expect(prisma.parrillaEntry.create).toHaveBeenCalledTimes(3)
     expect(result.entriesCreated).toBe(3)
 
-    // La segunda entry se crea con datos parciales (sin headline)
-    const secondCall = vi.mocked(prisma.parrillaEntry.create).mock.calls[1]
-    const secondEntryData = (secondCall[0] as any).data
-    expect(secondEntryData.headline).toBeUndefined()
-    expect(secondEntryData.primaryText).toBeUndefined()
-    expect(secondEntryData.visualConcept).toBe('Behind the scenes')
+    // Una entry se crea con datos parciales (sin headline) — con batches paralelos el orden de calls puede variar
+    const allCalls = vi.mocked(prisma.parrillaEntry.create).mock.calls
+    const partialEntry = allCalls.find(call => (call[0] as any).data.headline === undefined)
+    expect(partialEntry).toBeDefined()
+    expect((partialEntry![0] as any).data.primaryText).toBeUndefined()
+    expect((partialEntry![0] as any).data.visualConcept).toBe('Behind the scenes')
   })
 
   it('debe continuar si generateImagePrompt falla (non-blocking)', async () => {

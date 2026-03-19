@@ -183,4 +183,17 @@ describe('cleanJsonResponse', () => {
   it('trims whitespace around JSON', () => {
     expect(cleanJsonResponse('  {"spaced":true}  ')).toBe('{"spaced":true}')
   })
+
+  it('extracts JSON object from surrounding text', () => {
+    expect(cleanJsonResponse('Here is the result:\n{"key":"value"}\nDone!')).toBe('{"key":"value"}')
+  })
+
+  it('extracts JSON array from surrounding text', () => {
+    expect(cleanJsonResponse('Sure, here you go:\n[{"a":1},{"b":2}]\nLet me know if you need more.')).toBe('[{"a":1},{"b":2}]')
+  })
+
+  it('handles nested JSON structures', () => {
+    const nested = '{"outer":{"inner":[1,2,3]}}'
+    expect(cleanJsonResponse(`Some text\n${nested}\nMore text`)).toBe(nested)
+  })
 })

@@ -53,7 +53,15 @@ export function slugify(text: string): string {
 }
 
 export function cleanJsonResponse(text: string): string {
-  return text.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim()
+  let cleaned = text.trim()
+  // Remove markdown code fences
+  cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '')
+  // Try to extract JSON array or object if there's extra text
+  const jsonMatch = cleaned.match(/(\[[\s\S]*\]|\{[\s\S]*\})/)
+  if (jsonMatch) {
+    cleaned = jsonMatch[1]
+  }
+  return cleaned.trim()
 }
 
 export function timeAgo(date: Date | string): string {
